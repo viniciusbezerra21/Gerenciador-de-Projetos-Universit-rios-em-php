@@ -40,8 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $imagem_nome = uniqid() . '.' . $extensao;
             $caminho_destino = '../uploads/' . $imagem_nome;
             
-            if (!file_exists('uploads')) {
-                mkdir('uploads', 0777, true);
+            if (!file_exists('../uploads')) {
+                mkdir('../uploads', 0777, true);
             }
             
             if (!move_uploaded_file($_FILES['imagem']['tmp_name'], $caminho_destino)) {

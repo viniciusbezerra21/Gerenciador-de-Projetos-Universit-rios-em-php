@@ -2,8 +2,6 @@
 session_start();
 require_once '../config/database.php';
 
-$conexao = getConnection();
-
 if (!isset($_SESSION['usuario_id'])) {
     header('Location: login.php');
     exit;
@@ -12,6 +10,12 @@ if (!isset($_SESSION['usuario_id'])) {
 $nome = $_SESSION['usuario_nome'];
 $tipo = $_SESSION['usuario_tipo'];
 $usuario_id = $_SESSION['usuario_id'];
+
+$conexao = getConnection();
+
+if (!$conexao) {
+    die("Erro na conexão com o banco de dados");
+}
 
 // Filtros
 $filtro_area = isset($_GET['area']) ? $_GET['area'] : '';
@@ -24,11 +28,6 @@ $query = "SELECT p.*, o.nome as orientador_nome, a.nome as area_nome, s.descrica
           LEFT JOIN areas a ON p.id_area = a.id 
           LEFT JOIN status s ON p.status = s.id 
           WHERE 1=1";
-
-// Se for aluno, mostrar apenas seus projetos
-if ($tipo === 'aluno') {
-    $query .= " AND EXISTS (SELECT 1 FROM projetos_alunos pa WHERE pa.id_projeto = p.id AND pa.id_aluno = $usuario_id)";
-}
 
 // Aplicar filtros
 if (!empty($filtro_area)) {
@@ -45,12 +44,33 @@ if (!empty($filtro_busca)) {
 $query .= " ORDER BY p.data_cadastro DESC";
 $result = $conexao->query($query);
 
+if (!$result) {
+    die("Erro na consulta: " . $conexao->error);
+}
+
+$projetos = [];
+while ($row = $result->fetch_assoc()) {
+    $projetos[] = $row;
+}
+
 // Buscar áreas e status para os filtros
 $query_areas = "SELECT id, nome FROM areas ORDER BY nome";
 $result_areas = $conexao->query($query_areas);
+$areas = [];
+if ($result_areas) {
+    while ($row = $result_areas->fetch_assoc()) {
+        $areas[] = $row;
+    }
+}
 
 $query_status = "SELECT id, descricao FROM status ORDER BY id";
 $result_status = $conexao->query($query_status);
+$status_list = [];
+if ($result_status) {
+    while ($row = $result_status->fetch_assoc()) {
+        $status_list[] = $row;
+    }
+}
 
 $conexao->close();
 ?>
@@ -98,24 +118,24 @@ $conexao->close();
                     <div class="filtro-group">
                         <select name="area" class="select-filtro">
                             <option value="">Todas as Áreas</option>
-                            <?php while ($area = $result_areas->fetch_assoc()): ?>
+                            <?php foreach ($areas as $area): ?>
                                 <option value="<?php echo $area['id']; ?>" 
                                         <?php echo ($filtro_area == $area['id']) ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($area['nome']); ?>
                                 </option>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </select>
                     </div>
 
                     <div class="filtro-group">
                         <select name="status" class="select-filtro">
                             <option value="">Todos os Status</option>
-                            <?php while ($status = $result_status->fetch_assoc()): ?>
+                            <?php foreach ($status_list as $status): ?>
                                 <option value="<?php echo $status['id']; ?>" 
                                         <?php echo ($filtro_status == $status['id']) ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($status['descricao']); ?>
                                 </option>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </select>
                     </div>
 
@@ -127,12 +147,12 @@ $conexao->close();
             <!-- Lista de Projetos -->
             <div class="lista-projetos">
                 <ul id="projetos">
-                    <?php if ($result->num_rows > 0): ?>
-                        <?php while ($projeto = $result->fetch_assoc()): ?>
+                    <?php if (count($projetos) > 0): ?>
+                        <?php foreach ($projetos as $projeto): ?>
                             <li class="projeto-card">
                                 <div class="imagem-projeto">
-                                    <?php if (!empty($projeto['imagem']) && file_exists('uploads/' . $projeto['imagem'])): ?>
-                                        <img src="uploads/<?php echo htmlspecialchars($projeto['imagem']); ?>" 
+                                    <?php if (!empty($projeto['imagem']) && file_exists('../uploads/' . $projeto['imagem'])): ?>
+                                        <img src="../uploads/<?php echo htmlspecialchars($projeto['imagem']); ?>" 
                                              alt="<?php echo htmlspecialchars($projeto['titulo']); ?>">
                                     <?php else: ?>
                                         <img src="https://via.placeholder.com/350x200?text=Sem+Imagem" 
@@ -159,7 +179,7 @@ $conexao->close();
                                     <a href="editar_projeto.php?id=<?php echo $projeto['id']; ?>" class="btn-card">Ver Detalhes</a>
                                 </div>
                             </li>
-                        <?php endwhile; ?>
+                        <?php endforeach; ?>
                     <?php else: ?>
                         <li class="sem-projetos-container">
                             <p class="sem-projetos">Nenhum projeto encontrado.</p>
@@ -170,6 +190,6 @@ $conexao->close();
         </div>
     </main>
 
-    <script src="../js/projetos.js"></script>
+    <script src="../js/projeto.js"></script>
 </body>
 </html>
