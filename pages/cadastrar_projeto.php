@@ -2,7 +2,6 @@
 session_start();
 require_once '../config/database.php';
 
-// Cria conexão
 $conexao = getConnection();
 
 if (!isset($_SESSION['usuario_id'])) {
@@ -15,9 +14,11 @@ $tipo = $_SESSION['usuario_tipo'];
 $mensagem = '';
 $tipo_mensagem = '';
 
-// Buscar orientadores e áreas
 $query_orientadores = "SELECT id, nome FROM orientadores ORDER BY nome";
 $result_orientadores = $conexao->query($query_orientadores);
+
+$query_status = "SELECT id, descricao AS nome FROM status ORDER BY id";
+$result_status = $conexao->query($query_status);
 
 $query_areas = "SELECT id, nome FROM areas ORDER BY nome";
 $result_areas = $conexao->query($query_areas);
@@ -27,14 +28,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $resumo = trim($_POST['resumo']);
     $id_orientador = $_POST['id_orientador'];
     $id_area = $_POST['id_area'];
-    $status = 1; // Status padrão: Em andamento
+    $status = $_POST['id_status'];
+    $imagem_nome = null;
+
+    if (isset($_FILES['imagem']) && $_FILES['imagem']['error'] === UPLOAD_ERR_OK) {
+        $extensoes_permitidas = ['jpg', 'jpeg', 'png', 'gif'];
+        $nome_arquivo = $_FILES['imagem']['name'];
+        $extensao = strtolower(pathinfo($nome_arquivo, PATHINFO_EXTENSION));
+        
+        if (in_array($extensao, $extensoes_permitidas)) {
+            $imagem_nome = uniqid() . '.' . $extensao;
+            $caminho_destino = '../uploads/' . $imagem_nome;
+            
+            if (!file_exists('uploads')) {
+                mkdir('uploads', 0777, true);
+            }
+            
+            if (!move_uploaded_file($_FILES['imagem']['tmp_name'], $caminho_destino)) {
+                $mensagem = 'Erro ao fazer upload da imagem!';
+                $tipo_mensagem = 'erro';
+                $imagem_nome = null;
+            }
+        } else {
+            $mensagem = 'Formato de imagem não permitido! Use JPG, JPEG, PNG ou GIF.';
+            $tipo_mensagem = 'erro';
+        }
+    }
 
     if (empty($titulo) || empty($resumo) || empty($id_orientador) || empty($id_area)) {
         $mensagem = 'Todos os campos são obrigatórios!';
         $tipo_mensagem = 'erro';
-    } else {
-        $stmt = $conexao->prepare("INSERT INTO projetos (titulo, resumo, id_orientador, id_area, status, data_cadastro) VALUES (?, ?, ?, ?, ?, NOW())");
-        $stmt->bind_param("ssiii", $titulo, $resumo, $id_orientador, $id_area, $status);
+    } else if ($tipo_mensagem !== 'erro') {
+        $stmt = $conexao->prepare("INSERT INTO projetos (titulo, resumo, imagem, id_orientador, id_area, status, data_cadastro) VALUES (?, ?, ?, ?, ?, ?, NOW())");
+        $stmt->bind_param("sssiii", $titulo, $resumo, $imagem_nome, $id_orientador, $id_area, $status);
         
         if ($stmt->execute()) {
             $mensagem = 'Projeto cadastrado com sucesso!';
@@ -47,7 +73,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fecha conexão no final (boa prática)
 $conexao->close();
 ?>
 
@@ -65,7 +90,7 @@ $conexao->close();
         <h2 class="titulo-sidebar">Bem-vindo(a), <?php echo htmlspecialchars($nome); ?>!</h2>
         <div class="funcoes-sidebar">
             <ul>
-                <li><a href="dashboard.php">Seus Projetos</a></li>
+                <li><a href="projetos.php">Seus Projetos</a></li>
                 <li><a href="cadastrar_projeto.php">Cadastrar Projeto</a></li>
                 <li><a href="relatorios.php">Gerar Relatórios</a></li>
                 <li><a href="../php/logout.php">Sair</a></li>
@@ -73,54 +98,71 @@ $conexao->close();
         </div>
     </aside>
 
-    <main>
-        <div class="container">
-            <h1 class="titulo">Cadastrar Projeto</h1>
-
-            <div class="apresentacao">
-                <p>Preencha o formulário abaixo para cadastrar um novo projeto acadêmico.</p>
-            </div>
-
+     <main class="main-content">
+        <div class="content-card">
+            <h2>Cadastrar Novo Projeto</h2>
+            
             <?php if ($mensagem): ?>
                 <div class="mensagem <?php echo $tipo_mensagem; ?>">
                     <?php echo htmlspecialchars($mensagem); ?>
                 </div>
             <?php endif; ?>
 
-            <form method="POST" action="/php/validar_cadastro.php" id="formCadastro" class="form-projeto">
+            <form method="POST" enctype="multipart/form-data">
                 <div class="form-group">
-                    <label for="titulo">Título</label>
-                    <input type="text" id="titulo" name="titulo" required placeholder="Digite o título do projeto">
+                    <label for="titulo">Título do Projeto</label>
+                    <input type="text" id="titulo" name="titulo" required>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="resumo">Resumo</label>
-                    <textarea id="resumo" name="resumo" required placeholder="Digite o resumo do projeto"></textarea>
+                    <textarea id="resumo" name="resumo" rows="5" required></textarea>
                 </div>
-                
+
+                <div class="form-group">
+                    <label for="imagem">Imagem do Projeto</label>
+                    <input type="file" id="imagem" name="imagem" accept="image/*">
+                    <small>Formatos aceitos: JPG, JPEG, PNG, GIF</small>
+                </div>
+
                 <div class="form-group">
                     <label for="id_orientador">Orientador</label>
-                    <select name="id_orientador" id="id_orientador" required>
-                        <option value="">Selecione...</option>
-                        <?php while ($row = $result_orientadores->fetch_assoc()): ?>
-                            <option value="<?php echo $row['id']; ?>"><?php echo $row['nome']; ?></option>
+                    <select id="id_orientador" name="id_orientador" required>
+                        <option value="">Selecione um orientador</option>
+                        <?php while ($orientador = $result_orientadores->fetch_assoc()): ?>
+                            <option value="<?php echo $orientador['id']; ?>">
+                                <?php echo htmlspecialchars($orientador['nome']); ?>
+                            </option>
                         <?php endwhile; ?>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="id_area">Área</label>
-                    <select name="id_area" id="id_area" required>
-                        <option value="">Selecione...</option>
-                        <?php while ($row = $result_areas->fetch_assoc()): ?>
-                            <option value="<?php echo $row['id']; ?>"><?php echo $row['nome']; ?></option>
+                    <select id="id_area" name="id_area" required>
+                        <option value="">Selecione uma área</option>
+                        <?php while ($area = $result_areas->fetch_assoc()): ?>
+                            <option value="<?php echo $area['id']; ?>">
+                                <?php echo htmlspecialchars($area['nome']); ?>
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="id_status">Status</label>
+                    <select id="id_status" name="id_status" required>
+                        <option value="">Selecione um status</option>
+                        <?php while ($status = $result_status->fetch_assoc()): ?>
+                            <option value="<?php echo $status['id']; ?>">
+                                <?php echo htmlspecialchars($status['nome']); ?>
+                            </option>
                         <?php endwhile; ?>
                     </select>
                 </div>
                 
                 <button type="submit" class="btn-primary">Cadastrar Projeto</button>
             </form>
-
         </div>
     </main>
 </body>
