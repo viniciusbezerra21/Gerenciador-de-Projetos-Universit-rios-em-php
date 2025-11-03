@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $email = sanitizeInput($_POST['email'] ?? '');
         $senha = $_POST['senha'] ?? '';
+        $remember_me = isset($_POST['remember_me']) && $_POST['remember_me'] === '1';
 
         if (empty($email) || empty($senha)) {
             $mensagem = 'Por favor, preencha todos os campos.';
@@ -46,6 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['usuario_email'] = $usuario['email'];
                     $_SESSION['login_time'] = time();
 
+                    if ($remember_me) {
+                        createRememberMeCookie($usuario['id']);
+                    }
+
                     $stmt->close();
                     $conn->close();
                     
@@ -54,7 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $mensagem = 'Email ou senha incorretos.';
                     $tipo_mensagem = 'erro';
-                    // Log attempt (opcional para auditoria)
                 }
                 
                 $stmt->close();
@@ -75,6 +79,49 @@ $csrf_token = generateCSRFToken();
     <title>Login - Sistema de Projetos</title>
     <link rel="stylesheet" href="../css/forms.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Raleway:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <style>
+        .password-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .password-input-wrapper input[type="password"],
+        .password-input-wrapper input[type="text"] {
+            width: 100%;
+            padding-right: 45px;
+        }
+
+        .toggle-password-btn {
+            position: absolute;
+            right: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            color: #94a3b8;
+        }
+
+        .toggle-password-btn:hover {
+            color: #59a4eb;
+            transform: scale(1.1);
+        }
+
+        .toggle-password-btn:active {
+            transform: scale(0.95);
+        }
+
+        .eye-icon {
+            width: 20px;
+            height: 20px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -97,7 +144,6 @@ $csrf_token = generateCSRFToken();
             <?php endif; ?>
 
             <form method="POST" action="">
-                <!-- Adicionar token CSRF -->
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
                 
                 <div class="form-group">
@@ -107,7 +153,22 @@ $csrf_token = generateCSRFToken();
 
                 <div class="form-group">
                     <label for="senha">Senha</label>
-                    <input type="password" id="senha" name="senha" required placeholder="Digite sua senha" autocomplete="current-password">
+                    <!-- added password input wrapper with toggle button -->
+                    <div class="password-input-wrapper">
+                        <input type="password" id="senha" name="senha" required placeholder="Digite sua senha" autocomplete="current-password">
+                        <button type="button" class="toggle-password-btn" onclick="togglePasswordVisibility('senha')">
+                            <svg class="eye-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1 12S5.4 6 12 6S23 12 23 12S18.6 18 12 18S1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Added remember me checkbox -->
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="remember_me" name="remember_me" value="1" style="width: auto; margin: 0;">
+                    <label for="remember_me" style="margin: 0; font-weight: normal;">Lembrar-me por 30 dias</label>
                 </div>
 
                 <button type="submit" class="btn-primary">Entrar</button>
@@ -118,5 +179,16 @@ $csrf_token = generateCSRFToken();
             </form>
         </div>
     </div>
+
+    <script>
+        function togglePasswordVisibility(inputId) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+            } else {
+                input.type = 'password';
+            }
+        }
+    </script>
 </body>
 </html>

@@ -1,72 +1,93 @@
 <?php
-session_start();
+require_once '../config/security.php';
 require_once '../config/database.php';
 
 $mensagem = '';
 $tipo_mensagem = '';
 
+if (isset($_SESSION['usuario_id'])) {
+    header('Location: projetos.php');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nome = trim($_POST['nome']);
-    $email = trim($_POST['email']);
-    $senha = $_POST['senha'];
-    $tipo = $_POST['tipo']; // 'aluno' ou 'orientador'
-    $matricula = isset($_POST['matricula']) ? trim($_POST['matricula']) : null;
-    
-    // Validações básicas
-    if (empty($nome) || empty($email) || empty($senha) || empty($tipo)) {
-        $mensagem = 'Por favor, preencha todos os campos obrigatórios.';
-        $tipo_mensagem = 'erro';
-    } elseif ($tipo === 'aluno' && empty($matricula)) {
-        $mensagem = 'Matrícula é obrigatória para alunos.';
-        $tipo_mensagem = 'erro';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $mensagem = 'Email inválido.';
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        $mensagem = 'Erro de segurança. Tente novamente.';
         $tipo_mensagem = 'erro';
     } else {
-        $conn = getConnection();
-        $conn->begin_transaction();
-        
-        try {
-            // Hash da senha
-            $senha_hash = password_hash($senha, PASSWORD_DEFAULT);
-            
-            if ($tipo === 'aluno') {
-                // Inserir aluno
-                $stmt = $conn->prepare("INSERT INTO alunos (nome, matricula, email) VALUES (?, ?, ?)");
-                $stmt->bind_param("sss", $nome, $matricula, $email);
-                $stmt->execute();
-                $stmt->close();
-            } else {
-                // Inserir orientador
-                $stmt = $conn->prepare("INSERT INTO orientadores (nome, email) VALUES (?, ?)");
-                $stmt->bind_param("ss", $nome, $email);
-                $stmt->execute();
-                $stmt->close();
-            }
-            
-            // Inserir usuário
-            $stmt = $conn->prepare("INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("ssss", $nome, $email, $senha_hash, $tipo);
-            $stmt->execute();
-            $stmt->close();
-            
-            $conn->commit();
-            $mensagem = 'Cadastro realizado com sucesso!';
-            $tipo_mensagem = 'sucesso';
-            
-        } catch(Exception $e) {
-            $conn->rollback();
-            if (strpos($e->getMessage(), 'Duplicate entry') !== false) {
-                $mensagem = 'Email ou matrícula já cadastrados.';
-            } else {
-                $mensagem = 'Erro ao cadastrar: ' . $e->getMessage();
-            }
+        $nome = sanitizeInput($_POST['nome'] ?? '');
+        $email = sanitizeInput($_POST['email'] ?? '');
+        $senha = $_POST['senha'] ?? '';
+        $tipo = 'aluno';
+
+        if (empty($nome) || empty($email) || empty($senha)) {
+            $mensagem = 'Por favor, preencha todos os campos.';
             $tipo_mensagem = 'erro';
+        } elseif (!validateEmail($email)) {
+            $mensagem = 'Email inválido.';
+            $tipo_mensagem = 'erro';
+        } elseif (strlen($senha) < 8) {
+            $mensagem = 'A senha deve ter no mínimo 8 caracteres.';
+            $tipo_mensagem = 'erro';
+        } else {
+            $conn = getConnection();
+            
+            $stmt_check = $conn->prepare("SELECT id FROM usuarios WHERE email = ? OR nome = ?");
+            if (!$stmt_check) {
+                $mensagem = 'Erro no servidor. Tente novamente.';
+                $tipo_mensagem = 'erro';
+            } else {
+                $stmt_check->bind_param("ss", $email, $nome);
+                $stmt_check->execute();
+                $result_check = $stmt_check->get_result();
+                
+                if ($result_check->num_rows > 0) {
+                    // Verificar qual campo é duplicado
+                    $row = $result_check->fetch_assoc();
+                    $stmt_check_email = $conn->prepare("SELECT id FROM usuarios WHERE email = ?");
+                    $stmt_check_email->bind_param("s", $email);
+                    $stmt_check_email->execute();
+                    
+                    if ($stmt_check_email->get_result()->num_rows > 0) {
+                        $mensagem = 'Este email já está cadastrado!';
+                    } else {
+                        $mensagem = 'Este nome de usuário já está em uso!';
+                    }
+                    $tipo_mensagem = 'erro';
+                    $stmt_check_email->close();
+                } else {
+                    // Hash da senha
+                    $senha_hash = password_hash($senha, PASSWORD_DEFAULT);
+                    
+                    // INSERT no banco
+                    $stmt = $conn->prepare("INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)");
+                    if (!$stmt) {
+                        $mensagem = 'Erro ao criar conta. Tente novamente.';
+                        $tipo_mensagem = 'erro';
+                    } else {
+                        $stmt->bind_param("ssss", $nome, $email, $senha_hash, $tipo);
+                        
+                        if ($stmt->execute()) {
+                            $stmt->close();
+                            $conn->close();
+                            header('Location: login.php?cadastro=sucesso');
+                            exit;
+                        } else {
+                            $mensagem = 'Erro ao cadastrar usuário. Tente novamente.';
+                            $tipo_mensagem = 'erro';
+                        }
+                        $stmt->close();
+                    }
+                }
+                $stmt_check->close();
+            }
+            
+            $conn->close();
         }
-        
-        $conn->close();
     }
 }
+
+$csrf_token = generateCSRFToken();
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -75,9 +96,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cadastro - Sistema de Projetos</title>
     <link rel="stylesheet" href="../css/forms.css">
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Raleway:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Raleway:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <style>
+        .password-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .password-input-wrapper input[type="password"],
+        .password-input-wrapper input[type="text"] {
+            width: 100%;
+            padding-right: 45px;
+        }
+
+        .toggle-password-btn {
+            position: absolute;
+            right: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            color: #94a3b8;
+        }
+
+        .toggle-password-btn:hover {
+            color: #59a4eb;
+            transform: scale(1.1);
+        }
+
+        .toggle-password-btn:active {
+            transform: scale(0.95);
+        }
+
+        .eye-icon {
+            width: 20px;
+            height: 20px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -86,65 +148,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <h1>Cadastro</h1>
                 <p>Sistema de Gerenciamento de Projetos Acadêmicos</p>
             </div>
-            
+
             <?php if ($mensagem): ?>
-                <div class="mensagem <?php echo $tipo_mensagem; ?>">
+                <div class="mensagem <?php echo htmlspecialchars($tipo_mensagem); ?>">
                     <?php echo htmlspecialchars($mensagem); ?>
                 </div>
             <?php endif; ?>
-            
-            <form method="POST" action="" id="formCadastro">
-                <div class="form-group">
-                    <label for="tipo">Tipo de Cadastro</label>
-                    <select name="tipo" id="tipo" required onchange="toggleMatricula()">
-                        <option value="">Selecione...</option>
-                        <option value="aluno">Aluno</option>
-                        <option value="orientador">Orientador</option>
-                    </select>
-                </div>
+
+            <form method="POST" action="">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
                 
                 <div class="form-group">
                     <label for="nome">Nome Completo</label>
-                    <input type="text" id="nome" name="nome" required placeholder="Digite seu nome completo">
+                    <input type="text" id="nome" name="nome" required placeholder="Digite seu nome completo" autocomplete="name">
                 </div>
-                
-                <div class="form-group" id="matriculaGroup" style="display: none;">
-                    <label for="matricula">Matrícula</label>
-                    <input type="text" id="matricula" name="matricula" placeholder="Digite sua matrícula">
-                </div>
-                
+
                 <div class="form-group">
                     <label for="email">Email</label>
-                    <input type="email" id="email" name="email" required placeholder="seu@email.com">
+                    <input type="email" id="email" name="email" required placeholder="seu@email.com" autocomplete="email">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="senha">Senha</label>
-                    <input type="password" id="senha" name="senha" required placeholder="Mínimo 6 caracteres" minlength="6">
+                    <div class="password-input-wrapper">
+                        <input type="password" id="senha" name="senha" required placeholder="Digite uma senha forte" autocomplete="new-password">
+                        <button type="button" class="toggle-password-btn" onclick="togglePasswordVisibility('senha')">
+                            <svg class="eye-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1 12S5.4 6 12 6S23 12 23 12S18.6 18 12 18S1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <small style="color: #64748b; margin-top: 4px; display: block;">Mínimo de 8 caracteres</small>
                 </div>
-                
+
                 <button type="submit" class="btn-primary">Cadastrar</button>
-                
+
                 <div class="footer-link">
                     Já tem uma conta? <a href="login.php">Fazer login</a>
                 </div>
             </form>
         </div>
     </div>
-    
+
     <script>
-        function toggleMatricula() {
-            const tipo = document.getElementById('tipo').value;
-            const matriculaGroup = document.getElementById('matriculaGroup');
-            const matriculaInput = document.getElementById('matricula');
-            
-            if (tipo === 'aluno') {
-                matriculaGroup.style.display = 'block';
-                matriculaInput.required = true;
+        function togglePasswordVisibility(inputId) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
             } else {
-                matriculaGroup.style.display = 'none';
-                matriculaInput.required = false;
-                matriculaInput.value = '';
+                input.type = 'password';
             }
         }
     </script>

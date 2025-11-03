@@ -1,16 +1,14 @@
 <?php
 session_start();
+require_once '../config/security.php';
 require_once '../config/database.php';
 
-if (!isset($_SESSION['usuario_id'])) {
-    header('Location: login.php');
-    exit;
-}
+requireLogin();
 
-$nome = $_SESSION['usuario_nome'] ?? 'Usuário';
-$tipo = $_SESSION['usuario_tipo'] ?? 'aluno';
+$nome = sanitizeInput($_SESSION['usuario_nome']);
+$tipo = $_SESSION['usuario_tipo'];
 $usuario_id = $_SESSION['usuario_id'];
-$usuario_email = $_SESSION['usuario_email'] ?? '';
+$usuario_email = sanitizeInput($_SESSION['usuario_email']);
 
 $conexao = getConnection();
 
@@ -18,10 +16,25 @@ if (!$conexao) {
     die("Erro na conexão com o banco de dados");
 }
 
+$foto_perfil = null;
+$stmt_user = $conexao->prepare("SELECT foto_perfil FROM usuarios WHERE id = ?");
+if (!$stmt_user) {
+    error_log("Prepare failed: " . $conexao->error);
+} else {
+    $stmt_user->bind_param("i", $usuario_id);
+    $stmt_user->execute();
+    $result_user = $stmt_user->get_result();
+    if ($result_user && $result_user->num_rows > 0) {
+        $user_data = $result_user->fetch_assoc();
+        $foto_perfil = $user_data['foto_perfil'] ?? null;
+    }
+    $stmt_user->close();
+}
+
 // Filtros
-$filtro_area = isset($_GET['area']) ? $_GET['area'] : '';
-$filtro_status = isset($_GET['status']) ? $_GET['status'] : '';
-$filtro_busca = isset($_GET['busca']) ? $_GET['busca'] : '';
+$filtro_area = isset($_GET['area']) ? intval($_GET['area']) : 0;
+$filtro_status = isset($_GET['status']) ? intval($_GET['status']) : 0;
+$filtro_busca = sanitizeInput($_GET['busca'] ?? '');
 
 $query = "SELECT p.*, o.nome as orientador_nome, a.nome as area_nome, s.descricao as status_descricao 
           FROM projetos p 
@@ -30,56 +43,90 @@ $query = "SELECT p.*, o.nome as orientador_nome, a.nome as area_nome, s.descrica
           LEFT JOIN status s ON p.status = s.id ";
 
 $where_conditions = [];
+$params = [];
+$types = '';
 
-// Determinar filtro por tipo de usuário
-if ($tipo === 'orientador' && !empty($usuario_email)) {
-    $query_orientador = "SELECT id FROM orientadores WHERE email = '" . $conexao->real_escape_string($usuario_email) . "' LIMIT 1";
-    $result_orientador = $conexao->query($query_orientador);
-    
-    if ($result_orientador && $result_orientador->num_rows > 0) {
-        $orientador = $result_orientador->fetch_assoc();
-        $where_conditions[] = "p.id_orientador = " . intval($orientador['id']);
+if ($tipo === 'orientador') {
+    $stmt = $conexao->prepare("SELECT id FROM orientadores WHERE email = ? LIMIT 1");
+    if (!$stmt) {
+        error_log("Prepare orientador failed: " . $conexao->error);
     } else {
-        $where_conditions[] = "1=0";
+        $stmt->bind_param("s", $usuario_email);
+        $stmt->execute();
+        $result_orientador = $stmt->get_result();
+        
+        if ($result_orientador && $result_orientador->num_rows > 0) {
+            $orientador = $result_orientador->fetch_assoc();
+            $where_conditions[] = "p.id_orientador = ?";
+            $params[] = $orientador['id'];
+            $types .= 'i';
+        } else {
+            $where_conditions[] = "1=0";
+        }
+        $stmt->close();
     }
-} else if (!empty($usuario_email)) {
-    $query_aluno = "SELECT id FROM alunos WHERE email = '" . $conexao->real_escape_string($usuario_email) . "' LIMIT 1";
-    $result_aluno = $conexao->query($query_aluno);
-    
-    if ($result_aluno && $result_aluno->num_rows > 0) {
-        $aluno = $result_aluno->fetch_assoc();
-        $query .= "INNER JOIN projetos_alunos pa ON p.id = pa.id_projeto ";
-        $where_conditions[] = "pa.id_aluno = " . intval($aluno['id']);
+} else if ($tipo === 'aluno') {
+    $stmt = $conexao->prepare("SELECT id FROM alunos WHERE email = ? LIMIT 1");
+    if (!$stmt) {
+        error_log("Prepare aluno failed: " . $conexao->error);
     } else {
-        $where_conditions[] = "1=0";
+        $stmt->bind_param("s", $usuario_email);
+        $stmt->execute();
+        $result_aluno = $stmt->get_result();
+        
+        if ($result_aluno && $result_aluno->num_rows > 0) {
+            $aluno = $result_aluno->fetch_assoc();
+            $query .= "INNER JOIN projetos_alunos pa ON p.id = pa.id_projeto ";
+            $where_conditions[] = "pa.id_aluno = ?";
+            $params[] = $aluno['id'];
+            $types .= 'i';
+        } else {
+            $where_conditions[] = "1=0";
+        }
+        $stmt->close();
     }
 }
 
+// Add WHERE clause
 $query .= "WHERE " . (count($where_conditions) > 0 ? implode(" AND ", $where_conditions) : "1=1");
 
-// Aplicar filtros
-if (!empty($filtro_area)) {
-    $query .= " AND p.id_area = " . intval($filtro_area);
+// Apply filters
+if ($filtro_area > 0) {
+    $query .= " AND p.id_area = ?";
+    $params[] = $filtro_area;
+    $types .= 'i';
 }
-if (!empty($filtro_status)) {
-    $query .= " AND p.status = " . intval($filtro_status);
+if ($filtro_status > 0) {
+    $query .= " AND p.status = ?";
+    $params[] = $filtro_status;
+    $types .= 'i';
 }
 if (!empty($filtro_busca)) {
-    $filtro_busca_safe = $conexao->real_escape_string($filtro_busca);
-    $query .= " AND (p.titulo LIKE '%$filtro_busca_safe%' OR p.resumo LIKE '%$filtro_busca_safe%')";
+    $query .= " AND (p.titulo LIKE ? OR p.resumo LIKE ?)";
+    $search_term = "%$filtro_busca%";
+    $params[] = $search_term;
+    $params[] = $search_term;
+    $types .= 'ss';
 }
 
 $query .= " ORDER BY p.data_cadastro DESC";
 
-$result = $conexao->query($query);
+$stmt = $conexao->prepare($query);
+if (!$stmt) {
+    error_log("Prepare query failed: " . $conexao->error);
+    $projetos = [];
+} else {
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
+    }
+    $stmt->execute();
+    $result = $stmt->get_result();
 
-if (!$result) {
-    die("Erro na consulta: " . $conexao->error);
-}
-
-$projetos = [];
-while ($row = $result->fetch_assoc()) {
-    $projetos[] = $row;
+    $projetos = [];
+    while ($row = $result->fetch_assoc()) {
+        $projetos[] = $row;
+    }
+    $stmt->close();
 }
 
 // Buscar áreas e status para os filtros
@@ -111,6 +158,69 @@ $conexao->close();
     <title>Meu Perfil - Meus Projetos</title>
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* Added styles for profile section */
+        .perfil-header {
+            background: linear-gradient(135deg, #59a4eb 0%, #3d7bb8 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+        .perfil-foto {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid white;
+            flex-shrink: 0;
+        }
+        .perfil-foto-placeholder {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 4px solid white;
+            flex-shrink: 0;
+            color: white;
+            font-size: 12px;
+            text-align: center;
+            padding: 10px;
+        }
+        .perfil-info {
+            flex: 1;
+        }
+        .perfil-info h1 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+        }
+        .perfil-info p {
+            margin: 5px 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .btn-editar-perfil {
+            background-color: white;
+            color: #59a4eb;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            text-decoration: none;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .btn-editar-perfil:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
 </head>
 <body>
     <aside>
@@ -121,6 +231,7 @@ $conexao->close();
                 <li><a href="projetos.php">Todos os Projetos</a></li>
                 <li><a href="cadastrar_projeto.php">Cadastrar Projeto</a></li>
                 <li><a href="relatorios.php">Gerar Relatórios</a></li>
+                <li><a href="../index.php">Inicio</a></li>
                 <li><a href="../php/logout.php">Sair</a></li>
             </ul>
         </div>
@@ -128,6 +239,24 @@ $conexao->close();
 
     <main>
         <div class="container">
+            <!-- Added profile header with photo display -->
+            <div class="perfil-header">
+                <?php if ($foto_perfil && file_exists('../uploads/perfil/' . $foto_perfil)): ?>
+                    <img src="../uploads/perfil/<?php echo htmlspecialchars($foto_perfil); ?>" 
+                         alt="Foto de perfil" 
+                         class="perfil-foto">
+                <?php else: ?>
+                    <div class="perfil-foto-placeholder">Sem foto</div>
+                <?php endif; ?>
+                
+                <div class="perfil-info">
+                    <h1><?php echo htmlspecialchars($nome); ?></h1>
+                    <p><strong>Email:</strong> <?php echo htmlspecialchars($usuario_email); ?></p>
+                    <p><strong>Tipo:</strong> <?php echo htmlspecialchars(ucfirst($tipo)); ?></p>
+                    <a href="editar_perfil.php" class="btn-editar-perfil">Editar Perfil</a>
+                </div>
+            </div>
+
             <h1 class="titulo">Meu Perfil - Meus Projetos</h1>
 
             <div class="apresentacao">
@@ -206,7 +335,7 @@ $conexao->close();
                                         </span>
                                     </div>
                                     
-                                    <a href="editar_projeto.php?id=<?php echo $projeto['id']; ?>" class="btn-card">Ver Detalhes</a>
+                                    <a href="detalhes_projeto.php?id=<?php echo $projeto['id']; ?>" class="btn-card">Ver Detalhes</a>
                                 </div>
                             </li>
                         <?php endforeach; ?>

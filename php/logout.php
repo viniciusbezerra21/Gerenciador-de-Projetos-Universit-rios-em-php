@@ -1,6 +1,8 @@
 <?php
 require_once '../config/security.php';
 
+deleteRememberMeCookie();
+
 if (session_status() !== PHP_SESSION_NONE) {
     $_SESSION = [];
     

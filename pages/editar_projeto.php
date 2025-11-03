@@ -1,17 +1,16 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../config/security.php';
+
+requireLogin();
 
 $conexao = getConnection();
-
-if (!isset($_SESSION['usuario_id'])) {
-    header('Location: login.php');
-    exit;
-}
 
 $nome = $_SESSION['usuario_nome'];
 $tipo = $_SESSION['usuario_tipo'];
 $usuario_id = $_SESSION['usuario_id'];
+$usuario_email = $_SESSION['usuario_email'];
 $mensagem = '';
 $tipo_mensagem = '';
 
@@ -39,6 +38,34 @@ if (!$projeto) {
     exit;
 }
 
+$is_owner = false;
+if ($tipo === 'orientador') {
+    $stmt = $conexao->prepare("SELECT id FROM orientadores WHERE email = ? LIMIT 1");
+    $stmt->bind_param("s", $usuario_email);
+    $stmt->execute();
+    $result_orientador = $stmt->get_result();
+    if ($result_orientador && $result_orientador->num_rows > 0) {
+        $orientador = $result_orientador->fetch_assoc();
+        $is_owner = ($projeto['id_orientador'] == $orientador['id']);
+    }
+    $stmt->close();
+} else {
+    $stmt = $conexao->prepare("SELECT a.id FROM alunos a 
+                               INNER JOIN projetos_alunos pa ON a.id = pa.id_aluno 
+                               WHERE a.email = ? AND pa.id_projeto = ? LIMIT 1");
+    $stmt->bind_param("si", $usuario_email, $id_projeto);
+    $stmt->execute();
+    $result_aluno = $stmt->get_result();
+    $is_owner = ($result_aluno && $result_aluno->num_rows > 0);
+    $stmt->close();
+}
+
+if (!$is_owner) {
+    header('Location: detalhes_projeto.php?id=' . $id_projeto);
+    exit;
+}
+
+
 $stmt = $conexao->prepare("SELECT a.id, a.nome, a.matricula, a.email 
                            FROM alunos a 
                            INNER JOIN projetos_alunos pa ON a.id = pa.id_aluno 
@@ -46,6 +73,16 @@ $stmt = $conexao->prepare("SELECT a.id, a.nome, a.matricula, a.email
 $stmt->bind_param("i", $id_projeto);
 $stmt->execute();
 $result_alunos_projeto = $stmt->get_result();
+$stmt->close();
+
+$stmt = $conexao->prepare("SELECT * FROM documentos WHERE id_projeto = ? ORDER BY data_upload DESC");
+$stmt->bind_param("i", $id_projeto);
+$stmt->execute();
+$result_docs = $stmt->get_result();
+$documentos = [];
+while ($doc = $result_docs->fetch_assoc()) {
+    $documentos[] = $doc;
+}
 $stmt->close();
 
 $query_alunos = "SELECT id, nome, matricula FROM alunos ORDER BY nome";
@@ -174,11 +211,127 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao'])) {
         $stmt->execute();
         $result_alunos_projeto = $stmt->get_result();
         $stmt->close();
+    } elseif ($acao === 'adicionar_documento') {
+        if (isset($_FILES['documento']) && $_FILES['documento']['error'] === UPLOAD_ERR_OK) {
+            $extensoes_permitidas = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt'];
+            $nome_original = $_FILES['documento']['name'];
+            $extensao = strtolower(pathinfo($nome_original, PATHINFO_EXTENSION));
+            $tamanho = $_FILES['documento']['size'];
+            $max_size = 10 * 1024 * 1024; // 10MB
+            
+            if (!in_array($extensao, $extensoes_permitidas)) {
+                $mensagem = 'Tipo de arquivo não permitido! Use: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT';
+                $tipo_mensagem = 'erro';
+            } elseif ($tamanho > $max_size) {
+                $mensagem = 'Arquivo muito grande! Tamanho máximo: 10MB';
+                $tipo_mensagem = 'erro';
+            } else {
+                $nome_arquivo = uniqid() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '', $nome_original);
+                $caminho_destino = '../uploads/documentos/' . $nome_arquivo;
+                
+                if (!file_exists('../uploads/documentos')) {
+                    mkdir('../uploads/documentos', 0777, true);
+                }
+                
+                if (move_uploaded_file($_FILES['documento']['tmp_name'], $caminho_destino)) {
+                    $descricao = trim($_POST['descricao_documento'] ?? '');
+                    
+                    $stmt = $conexao->prepare("INSERT INTO documentos (id_projeto, nome_original, nome_arquivo, tipo_arquivo, tamanho, descricao) VALUES (?, ?, ?, ?, ?, ?)");
+                    $stmt->bind_param("isssis", $id_projeto, $nome_original, $nome_arquivo, $extensao, $tamanho, $descricao);
+                    
+                    if ($stmt->execute()) {
+                        $mensagem = 'Documento adicionado com sucesso!';
+                        $tipo_mensagem = 'sucesso';
+                        
+                        // Refresh documents list
+                        $stmt = $conexao->prepare("SELECT * FROM documentos WHERE id_projeto = ? ORDER BY data_upload DESC");
+                        $stmt->bind_param("i", $id_projeto);
+                        $stmt->execute();
+                        $result_docs = $stmt->get_result();
+                        $documentos = [];
+                        while ($doc = $result_docs->fetch_assoc()) {
+                            $documentos[] = $doc;
+                        }
+                        $stmt->close();
+                    } else {
+                        $mensagem = 'Erro ao salvar documento no banco de dados!';
+                        $tipo_mensagem = 'erro';
+                        unlink($caminho_destino);
+                    }
+                    $stmt->close();
+                } else {
+                    $mensagem = 'Erro ao fazer upload do documento!';
+                    $tipo_mensagem = 'erro';
+                }
+            }
+        } else {
+            $mensagem = 'Nenhum documento foi enviado!';
+            $tipo_mensagem = 'erro';
+        }
+    } elseif ($acao === 'excluir_documento') {
+        $id_documento = intval($_POST['id_documento']);
+        
+        $stmt = $conexao->prepare("SELECT * FROM documentos WHERE id = ? AND id_projeto = ?");
+        $stmt->bind_param("ii", $id_documento, $id_projeto);
+        $stmt->execute();
+        $result_doc = $stmt->get_result();
+        
+        if ($result_doc && $result_doc->num_rows > 0) {
+            $documento = $result_doc->fetch_assoc();
+            
+            // Delete file from filesystem
+            if (file_exists('../uploads/documentos/' . $documento['nome_arquivo'])) {
+                unlink('../uploads/documentos/' . $documento['nome_arquivo']);
+            }
+            
+            // Delete from database
+            $stmt = $conexao->prepare("DELETE FROM documentos WHERE id = ?");
+            $stmt->bind_param("i", $id_documento);
+            
+            if ($stmt->execute()) {
+                $mensagem = 'Documento excluído com sucesso!';
+                $tipo_mensagem = 'sucesso';
+                
+                // Refresh documents list
+                $stmt = $conexao->prepare("SELECT * FROM documentos WHERE id_projeto = ? ORDER BY data_upload DESC");
+                $stmt->bind_param("i", $id_projeto);
+                $stmt->execute();
+                $result_docs = $stmt->get_result();
+                $documentos = [];
+                while ($doc = $result_docs->fetch_assoc()) {
+                    $documentos[] = $doc;
+                }
+                $stmt->close();
+            } else {
+                $mensagem = 'Erro ao excluir documento!';
+                $tipo_mensagem = 'erro';
+            }
+        } else {
+            $mensagem = 'Documento não encontrado!';
+            $tipo_mensagem = 'erro';
+        }
+        $stmt->close();
     } elseif ($acao === 'excluir_projeto') {
+        
+        // Delete project image
         if (!empty($projeto['imagem']) && file_exists('../uploads/' . $projeto['imagem'])) {
             unlink('../uploads/' . $projeto['imagem']);
         }
         
+        // Delete all documents
+        $stmt = $conexao->prepare("SELECT nome_arquivo FROM documentos WHERE id_projeto = ?");
+        $stmt->bind_param("i", $id_projeto);
+        $stmt->execute();
+        $result_docs = $stmt->get_result();
+        
+        while ($doc = $result_docs->fetch_assoc()) {
+            if (file_exists('../uploads/documentos/' . $doc['nome_arquivo'])) {
+                unlink('../uploads/documentos/' . $doc['nome_arquivo']);
+            }
+        }
+        $stmt->close();
+        
+        // Delete project from database (CASCADE will delete related records)
         $stmt = $conexao->prepare("DELETE FROM projetos WHERE id = ?");
         $stmt->bind_param("i", $id_projeto);
         
@@ -230,7 +383,7 @@ $conexao->close();
             margin-bottom: 20px;
         }
         
-        .alunos-section {
+        .alunos-section, .documentos-section {
             background: white;
             padding: 30px;
             border-radius: 10px;
@@ -238,12 +391,12 @@ $conexao->close();
             margin-bottom: 30px;
         }
         
-        .alunos-lista {
+        .alunos-lista, .documentos-lista {
             list-style: none;
             margin-top: 20px;
         }
         
-        .aluno-item {
+        .aluno-item, .documento-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -253,11 +406,11 @@ $conexao->close();
             margin-bottom: 10px;
         }
         
-        .aluno-info {
+        .aluno-info, .documento-info {
             flex: 1;
         }
         
-        .btn-remover {
+        .btn-remover, .btn-excluir {
             padding: 8px 16px;
             background-color: #e74c3c;
             color: white;
@@ -267,32 +420,21 @@ $conexao->close();
             transition: background-color 0.3s ease;
         }
         
-        .btn-remover:hover {
+        .btn-remover:hover, .btn-excluir:hover {
             background-color: #c0392b;
         }
         
-        .btn-excluir {
-            padding: 12px 25px;
-            background-color: #e74c3c;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-        
-        .btn-excluir:hover {
-            background-color: #c0392b;
-        }
-        
-        .adicionar-aluno-form {
+        .adicionar-aluno-form, .adicionar-documento-form {
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            gap: 15px;
             margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
         }
         
-        .adicionar-aluno-form select {
-            flex: 1;
+        .adicionar-aluno-form select, .adicionar-documento-form input, .adicionar-documento-form textarea {
             padding: 12px 15px;
             border: 2px solid #e0e0e0;
             border-radius: 5px;
@@ -307,10 +449,22 @@ $conexao->close();
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease;
+            align-self: flex-start;
         }
         
         .btn-adicionar:hover {
             background-color: #229954;
+        }
+        
+        .file-icon {
+            display: inline-block;
+            padding: 5px 10px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 10px;
         }
     </style>
 </head>
@@ -330,7 +484,7 @@ $conexao->close();
 
     <main>
         <div class="container">
-            <h1 class="titulo">Detalhes do Projeto</h1>
+            <h1 class="titulo">Editar Projeto</h1>
             
             <?php if ($mensagem): ?>
                 <div class="mensagem <?php echo $tipo_mensagem; ?>">
@@ -341,7 +495,7 @@ $conexao->close();
             <div class="projeto-detalhes">
                 <div class="projeto-header">
                     <h2><?php echo htmlspecialchars($projeto['titulo']); ?></h2>
-                    <form method="POST" onsubmit="return confirm('Tem certeza que deseja excluir este projeto?');" style="display: inline;">
+                    <form method="POST" onsubmit="return confirm('Tem certeza que deseja excluir este projeto? Todos os arquivos e documentos serão removidos permanentemente!');" style="display: inline;">
                         <input type="hidden" name="acao" value="excluir_projeto">
                         <button type="submit" class="btn-excluir">Excluir Projeto</button>
                     </form>
@@ -461,6 +615,45 @@ $conexao->close();
                         <?php endwhile; ?>
                     </select>
                     <button type="submit" class="btn-adicionar">Adicionar Aluno</button>
+                </form>
+            </div>
+            
+            <!-- Documents section with upload and delete functionality -->
+            <div class="documentos-section">
+                <h2>Documentos Acadêmicos</h2>
+                
+                <?php if (count($documentos) > 0): ?>
+                    <ul class="documentos-lista">
+                        <?php foreach ($documentos as $doc): ?>
+                            <li class="documento-item">
+                                <div class="documento-info">
+                                    <span class="file-icon"><?php echo strtoupper($doc['tipo_arquivo']); ?></span>
+                                    <strong><?php echo htmlspecialchars($doc['nome_original']); ?></strong>
+                                    <?php if (!empty($doc['descricao'])): ?>
+                                        <br><small><?php echo htmlspecialchars($doc['descricao']); ?></small>
+                                    <?php endif; ?>
+                                    <br><small>Enviado em: <?php echo date('d/m/Y H:i', strtotime($doc['data_upload'])); ?> | Tamanho: <?php echo number_format($doc['tamanho'] / 1024, 2); ?> KB</small>
+                                </div>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="acao" value="excluir_documento">
+                                    <input type="hidden" name="id_documento" value="<?php echo $doc['id']; ?>">
+                                    <button type="submit" class="btn-remover" onclick="return confirm('Excluir este documento?');">Excluir</button>
+                                </form>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php else: ?>
+                    <p style="color: #7f8c8d; margin-top: 20px;">Nenhum documento adicionado a este projeto.</p>
+                <?php endif; ?>
+                
+                <form method="POST" enctype="multipart/form-data" class="adicionar-documento-form">
+                    <input type="hidden" name="acao" value="adicionar_documento">
+                    <label for="documento">Adicionar Documento</label>
+                    <input type="file" id="documento" name="documento" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt" required>
+                    <small>Formatos aceitos: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT. Tamanho máximo: 10MB</small>
+                    <label for="descricao_documento">Descrição (opcional)</label>
+                    <textarea id="descricao_documento" name="descricao_documento" rows="2" placeholder="Breve descrição do documento..."></textarea>
+                    <button type="submit" class="btn-adicionar">Adicionar Documento</button>
                 </form>
             </div>
         </div>

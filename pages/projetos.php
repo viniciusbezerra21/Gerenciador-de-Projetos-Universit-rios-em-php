@@ -112,6 +112,8 @@ $conexao->close();
                 <li><a href="projetos.php">Todos os Projetos</a></li>
                 <li><a href="cadastrar_projeto.php">Cadastrar Projeto</a></li>
                 <li><a href="relatorios.php">Gerar Relatórios</a></li>
+                <li><a href="../index.php">Inicio</a></li>
+                
                 <li><a href="../php/logout.php">Sair</a></li>
             </ul>
         </div>
@@ -119,10 +121,10 @@ $conexao->close();
 
     <main>
         <div class="container">
-            <h1 class="titulo">Veja seus Projetos</h1>
+            <h1 class="titulo">Veja projetos de outras pessoas</h1>
 
             <div class="apresentacao">
-                <p>Seus projetos cadastrados</p>
+                <p>Aqui está uma lista de todos os projetos cadastrados.</p>
             </div>
 
             <!-- Filtros -->
@@ -197,7 +199,8 @@ $conexao->close();
                                         </span>
                                     </div>
                                     
-                                    <a href="editar_projeto.php?id=<?php echo $projeto['id']; ?>" class="btn-card">Ver Detalhes</a>
+                                    <!-- Updated link to go to details page instead of edit page -->
+                                    <a href="detalhes_projeto.php?id=<?php echo $projeto['id']; ?>" class="btn-card">Ver Detalhes</a>
                                 </div>
                             </li>
                         <?php endforeach; ?>
