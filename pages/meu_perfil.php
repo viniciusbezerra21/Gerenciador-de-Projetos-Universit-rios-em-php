@@ -36,6 +36,7 @@ $filtro_area = isset($_GET['area']) ? intval($_GET['area']) : 0;
 $filtro_status = isset($_GET['status']) ? intval($_GET['status']) : 0;
 $filtro_busca = sanitizeInput($_GET['busca'] ?? '');
 
+// Base da query
 $query = "SELECT p.*, o.nome as orientador_nome, a.nome as area_nome, s.descricao as status_descricao 
           FROM projetos p 
           LEFT JOIN orientadores o ON p.id_orientador = o.id 
@@ -46,11 +47,11 @@ $where_conditions = [];
 $params = [];
 $types = '';
 
+// Filtrar por tipo de usuário
 if ($tipo === 'orientador') {
+    // Buscar ID do orientador
     $stmt = $conexao->prepare("SELECT id FROM orientadores WHERE email = ? LIMIT 1");
-    if (!$stmt) {
-        error_log("Prepare orientador failed: " . $conexao->error);
-    } else {
+    if ($stmt) {
         $stmt->bind_param("s", $usuario_email);
         $stmt->execute();
         $result_orientador = $stmt->get_result();
@@ -61,36 +62,44 @@ if ($tipo === 'orientador') {
             $params[] = $orientador['id'];
             $types .= 'i';
         } else {
+            // Se não encontrar o orientador, não mostrar nada
             $where_conditions[] = "1=0";
         }
         $stmt->close();
     }
 } else if ($tipo === 'aluno') {
+    // Buscar ID do aluno
     $stmt = $conexao->prepare("SELECT id FROM alunos WHERE email = ? LIMIT 1");
-    if (!$stmt) {
-        error_log("Prepare aluno failed: " . $conexao->error);
-    } else {
+    if ($stmt) {
         $stmt->bind_param("s", $usuario_email);
         $stmt->execute();
         $result_aluno = $stmt->get_result();
         
         if ($result_aluno && $result_aluno->num_rows > 0) {
             $aluno = $result_aluno->fetch_assoc();
+            $aluno_id = $aluno['id'];
+            
+            // IMPORTANTE: Fazer JOIN com a tabela projetos_alunos
             $query .= "INNER JOIN projetos_alunos pa ON p.id = pa.id_projeto ";
             $where_conditions[] = "pa.id_aluno = ?";
-            $params[] = $aluno['id'];
+            $params[] = $aluno_id;
             $types .= 'i';
         } else {
+            // Se não encontrar o aluno, não mostrar nada
             $where_conditions[] = "1=0";
         }
         $stmt->close();
     }
 }
 
-// Add WHERE clause
-$query .= "WHERE " . (count($where_conditions) > 0 ? implode(" AND ", $where_conditions) : "1=1");
+// Adicionar WHERE clause
+if (count($where_conditions) > 0) {
+    $query .= "WHERE " . implode(" AND ", $where_conditions);
+} else {
+    $query .= "WHERE 1=1";
+}
 
-// Apply filters
+// Aplicar filtros adicionais
 if ($filtro_area > 0) {
     $query .= " AND p.id_area = ?";
     $params[] = $filtro_area;
@@ -111,9 +120,10 @@ if (!empty($filtro_busca)) {
 
 $query .= " ORDER BY p.data_cadastro DESC";
 
+// Executar query
 $stmt = $conexao->prepare($query);
 if (!$stmt) {
-    error_log("Prepare query failed: " . $conexao->error);
+    error_log("Prepare failed: " . $conexao->error);
     $projetos = [];
 } else {
     if (!empty($params)) {
@@ -159,7 +169,6 @@ $conexao->close();
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        /* Added styles for profile section */
         .perfil-header {
             background: linear-gradient(135deg, #59a4eb 0%, #3d7bb8 100%);
             color: white;
@@ -307,7 +316,6 @@ $conexao->close();
 
     <main>
         <div class="container">
-            <!-- Added profile header with photo display -->
             <div class="perfil-header">
                 <?php if ($foto_perfil && file_exists('../uploads/perfil/' . $foto_perfil)): ?>
                     <img src="../uploads/perfil/<?php echo htmlspecialchars($foto_perfil); ?>" 
@@ -322,7 +330,6 @@ $conexao->close();
                     <p><strong>Email:</strong> <?php echo htmlspecialchars($usuario_email); ?></p>
                     <p><strong>Tipo:</strong> <?php echo htmlspecialchars(ucfirst($tipo)); ?></p>
                     <a href="editar_perfil.php" class="btn-editar-perfil">Editar Perfil</a>
-                    <!-- Added logout and delete profile buttons -->
                     <div style="margin-top: 15px; display: flex; gap: 10px;">
                         <a href="../php/logout.php" class="btn-editar-perfil" style="background-color: #f39c12; flex: 1; text-align: center; color: white;">Encerrar Sessão</a>
                         <button onclick="abrirModalExcluir()" class="btn-editar-perfil" style="background-color: #e74c3c; flex: 1; cursor: pointer; border: none; color: white;">Excluir Perfil</button>
@@ -336,14 +343,13 @@ $conexao->close();
                 <p>Aqui estão todos os seus projetos cadastrados (Tipo de usuário: <?php echo htmlspecialchars($tipo); ?>)</p>
             </div>
 
-            <!-- Filtros -->
             <div class="filtros-container">
                 <form method="GET" action="" class="filtros-form">
                     <div class="filtro-group">
                         <input type="text" 
                                name="busca" 
                                placeholder="Buscar por título ou resumo..." 
-                               value="<?php echo htmlspecialchars($filtro_busca); ?> "
+                               value="<?php echo htmlspecialchars($filtro_busca); ?>"
                                class="input-busca">
                     </div>
 
@@ -376,7 +382,6 @@ $conexao->close();
                 </form>
             </div>
 
-            <!-- Lista de Projetos -->
             <div class="lista-projetos">
                 <ul id="projetos">
                     <?php if (count($projetos) > 0): ?>
@@ -422,7 +427,6 @@ $conexao->close();
         </div>
     </main>
 
-    <!-- Added modal for profile deletion confirmation -->
     <div id="modalExcluir" class="modal">
         <div class="modal-conteudo">
             <div class="modal-header">
@@ -456,7 +460,6 @@ $conexao->close();
             document.body.style.overflow = 'auto';
         }
 
-        // Fechar modal ao clicar fora
         window.onclick = function(event) {
             var modal = document.getElementById('modalExcluir');
             if (event.target == modal) {

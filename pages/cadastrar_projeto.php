@@ -12,6 +12,11 @@ $usuario_email = sanitizeInput($_SESSION['usuario_email']);
 $mensagem = '';
 $tipo_mensagem = '';
 
+// DEBUG: Mostrar informações do usuário
+error_log("=== CADASTRO DE PROJETO ===");
+error_log("Email do usuário: " . $usuario_email);
+error_log("Tipo de usuário: " . $tipo);
+
 $query_orientadores = "SELECT id, nome FROM orientadores ORDER BY nome";
 $result_orientadores = $conexao->query($query_orientadores);
 
@@ -68,8 +73,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             if ($stmt->execute()) {
                 $projeto_id = $conexao->insert_id;
+                error_log("Projeto cadastrado com ID: " . $projeto_id);
                 
+                // IMPORTANTE: Vincular o aluno ao projeto
                 if ($tipo === 'aluno') {
+                    error_log("Tipo de usuário é ALUNO, buscando ID do aluno...");
+                    
                     $stmt_aluno = $conexao->prepare("SELECT id FROM alunos WHERE email = ? LIMIT 1");
                     $stmt_aluno->bind_param("s", $usuario_email);
                     $stmt_aluno->execute();
@@ -78,15 +87,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($result_aluno && $result_aluno->num_rows > 0) {
                         $aluno = $result_aluno->fetch_assoc();
                         $aluno_id = $aluno['id'];
+                        error_log("ID do aluno encontrado: " . $aluno_id);
                         
                         $stmt_link = $conexao->prepare("INSERT INTO projetos_alunos (id_projeto, id_aluno) VALUES (?, ?)");
                         $stmt_link->bind_param("ii", $projeto_id, $aluno_id);
-                        $stmt_link->execute();
+                        
+                        if ($stmt_link->execute()) {
+                            error_log("✓ Projeto vinculado ao aluno com SUCESSO!");
+                            error_log("  Projeto ID: " . $projeto_id . " | Aluno ID: " . $aluno_id);
+                        } else {
+                            error_log("✗ ERRO ao vincular projeto ao aluno: " . $stmt_link->error);
+                        }
                         $stmt_link->close();
+                    } else {
+                        error_log("✗ ERRO: Aluno não encontrado na tabela 'alunos' com email: " . $usuario_email);
+                        error_log("  Verifique se o aluno foi cadastrado corretamente na tabela 'alunos'");
                     }
                     $stmt_aluno->close();
+                } else if ($tipo === 'orientador') {
+                    error_log("Tipo de usuário é ORIENTADOR - não vincula em projetos_alunos");
+                } else {
+                    error_log("Tipo de usuário desconhecido: " . $tipo);
                 }
                 
+                // Upload de documentos
                 if (isset($_FILES['documentos']) && !empty($_FILES['documentos']['name'][0])) {
                     $documentos_dir = '../uploads/documentos/';
                     if (!file_exists($documentos_dir)) {
@@ -125,6 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $mensagem = 'Erro ao cadastrar projeto: ' . $conexao->error;
                 $tipo_mensagem = 'erro';
+                error_log("ERRO ao inserir projeto: " . $conexao->error);
             }
             $stmt->close();
         }

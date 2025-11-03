@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $conn = getConnection();
             
+            // Verificar duplicidade em usuarios
             $stmt_check = $conn->prepare("SELECT id FROM usuarios WHERE email = ? OR nome = ?");
             if (!$stmt_check) {
                 $mensagem = 'Erro no servidor. Tente novamente.';
@@ -48,7 +49,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if ($result_check->num_rows > 0) {
                     // Verificar qual campo é duplicado
-                    $row = $result_check->fetch_assoc();
                     $stmt_check_email = $conn->prepare("SELECT id FROM usuarios WHERE email = ?");
                     $stmt_check_email->bind_param("s", $email);
                     $stmt_check_email->execute();
@@ -64,24 +64,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Hash da senha
                     $senha_hash = password_hash($senha, PASSWORD_DEFAULT);
                     
-                    // INSERT no banco
-                    $stmt = $conn->prepare("INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)");
-                    if (!$stmt) {
-                        $mensagem = 'Erro ao criar conta. Tente novamente.';
-                        $tipo_mensagem = 'erro';
-                    } else {
+                    // Iniciar transação para garantir integridade
+                    $conn->begin_transaction();
+                    
+                    try {
+                        // 1. INSERT na tabela usuarios
+                        $stmt = $conn->prepare("INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)");
+                        if (!$stmt) {
+                            throw new Exception('Erro ao preparar statement de usuários');
+                        }
+                        
                         $stmt->bind_param("ssss", $nome, $email, $senha_hash, $tipo);
                         
-                        if ($stmt->execute()) {
-                            $stmt->close();
-                            $conn->close();
-                            header('Location: login.php?cadastro=sucesso');
-                            exit;
-                        } else {
-                            $mensagem = 'Erro ao cadastrar usuário. Tente novamente.';
-                            $tipo_mensagem = 'erro';
+                        if (!$stmt->execute()) {
+                            throw new Exception('Erro ao inserir usuário');
                         }
+                        
+                        $usuario_id = $conn->insert_id;
                         $stmt->close();
+                        
+                        // 2. INSERT na tabela correspondente (alunos ou orientadores)
+                        if ($tipo === 'aluno') {
+                            // Gerar matrícula automática: ANO + ID com 4 dígitos
+                            $matricula = date('Y') . str_pad($usuario_id, 4, '0', STR_PAD_LEFT);
+                            
+                            $stmt_aluno = $conn->prepare("INSERT INTO alunos (nome, email, matricula) VALUES (?, ?, ?)");
+                            if (!$stmt_aluno) {
+                                throw new Exception('Erro ao preparar statement de alunos');
+                            }
+                            
+                            $stmt_aluno->bind_param("sss", $nome, $email, $matricula);
+                            
+                            if (!$stmt_aluno->execute()) {
+                                throw new Exception('Erro ao inserir aluno: ' . $stmt_aluno->error);
+                            }
+                            
+                            error_log("✓ Aluno cadastrado: $nome (Matrícula: $matricula, Email: $email)");
+                            $stmt_aluno->close();
+                            
+                        } else if ($tipo === 'orientador') {
+                            $stmt_orientador = $conn->prepare("INSERT INTO orientadores (nome, email) VALUES (?, ?)");
+                            if (!$stmt_orientador) {
+                                throw new Exception('Erro ao preparar statement de orientadores');
+                            }
+                            
+                            $stmt_orientador->bind_param("ss", $nome, $email);
+                            
+                            if (!$stmt_orientador->execute()) {
+                                throw new Exception('Erro ao inserir orientador: ' . $stmt_orientador->error);
+                            }
+                            
+                            error_log("✓ Orientador cadastrado: $nome (Email: $email)");
+                            $stmt_orientador->close();
+                        }
+                        
+                        // Commit da transação
+                        $conn->commit();
+                        
+                        $conn->close();
+                        header('Location: login.php?cadastro=sucesso');
+                        exit;
+                        
+                    } catch (Exception $e) {
+                        // Rollback em caso de erro
+                        $conn->rollback();
+                        error_log("Erro no cadastro: " . $e->getMessage());
+                        $mensagem = 'Erro ao cadastrar usuário. Tente novamente.';
+                        $tipo_mensagem = 'erro';
                     }
                 }
                 $stmt_check->close();
@@ -145,7 +194,6 @@ $csrf_token = generateCSRFToken();
             stroke-linejoin: round;
         }
 
-        /* add styles for user type selection */
         .form-group.user-type-group {
             margin-bottom: 24px;
         }
@@ -208,7 +256,6 @@ $csrf_token = generateCSRFToken();
                     <input type="email" id="email" name="email" required placeholder="seu@email.com" autocomplete="email">
                 </div>
 
-                <!-- add user type selection -->
                 <div class="form-group user-type-group">
                     <label>Tipo de Cadastro</label>
                     <div class="radio-group">
