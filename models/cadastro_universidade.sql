@@ -3,7 +3,7 @@
 -- http://www.phpmyadmin.net
 --
 -- Host: localhost
--- Generation Time: 31-Out-2025 às 00:54
+-- Generation Time: 03-Nov-2025 às 14:55
 -- Versão do servidor: 5.7.11
 -- PHP Version: 7.0.3
 
@@ -38,8 +38,6 @@ CREATE TABLE `alunos` (
 --
 
 INSERT INTO `alunos` (`id`, `nome`, `matricula`, `email`) VALUES
-(1, 'Vinicius Bezerra', '3241', 'vini@email.com'),
-(2, 'Vinícius Andrade', 'A2025001', 'vinicius.andrade@aluno.senai.br'),
 (3, 'Lucas Oliveira', 'A2025002', 'lucas.oliveira@aluno.senai.br'),
 (4, 'Beatriz Souza', 'A2025003', 'beatriz.souza@aluno.senai.br'),
 (5, 'Gabriel Lima', 'A2025004', 'gabriel.lima@aluno.senai.br'),
@@ -48,7 +46,8 @@ INSERT INTO `alunos` (`id`, `nome`, `matricula`, `email`) VALUES
 (8, 'Ana Clara Silva', 'A2025007', 'ana.silva@aluno.senai.br'),
 (9, 'Pedro Henrique Rocha', 'A2025008', 'pedro.rocha@aluno.senai.br'),
 (10, 'Julia Martins', 'A2025009', 'julia.martins@aluno.senai.br'),
-(11, 'Caio Almeida', 'A2025010', 'caio.almeida@aluno.senai.br');
+(11, 'Caio Almeida', 'A2025010', 'caio.almeida@aluno.senai.br'),
+(17, 'Vinicius Gabriel Bezerra', 'A1234143', 'viniciusg21bezerra@gmail.com');
 
 -- --------------------------------------------------------
 
@@ -75,6 +74,30 @@ INSERT INTO `areas` (`id`, `nome`) VALUES
 (2, 'Engenharias'),
 (8, 'Linguística, Letras e Artes'),
 (9, 'Tecnologia da Informação');
+
+-- --------------------------------------------------------
+
+--
+-- Estrutura da tabela `documentos`
+--
+
+CREATE TABLE `documentos` (
+  `id` int(11) NOT NULL,
+  `id_projeto` int(11) NOT NULL,
+  `nome_original` varchar(255) NOT NULL,
+  `nome_arquivo` varchar(255) NOT NULL,
+  `tipo_arquivo` varchar(50) NOT NULL,
+  `tamanho` int(11) NOT NULL COMMENT 'Tamanho em bytes',
+  `descricao` varchar(500) DEFAULT NULL,
+  `data_upload` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Extraindo dados da tabela `documentos`
+--
+
+INSERT INTO `documentos` (`id`, `id_projeto`, `nome_original`, `nome_arquivo`, `tipo_arquivo`, `tamanho`, `descricao`, `data_upload`) VALUES
+(3, 26, 'Pasta2.xlsx', '6908b66b0ab74_Pasta2.xlsx', 'xlsx', 15116, '', '2025-11-03 14:04:27');
 
 -- --------------------------------------------------------
 
@@ -112,7 +135,8 @@ INSERT INTO `orientadores` (`id`, `nome`, `email`) VALUES
 (3, 'Profa. Marina Alves Pereira', 'marina.pereira@senai.br'),
 (4, 'Prof. Eduardo Lima Santos', 'eduardo.santos@senai.br'),
 (5, 'Profa. Fernanda Souza Ribeiro', 'fernanda.ribeiro@senai.br'),
-(6, 'Prof. João Victor Fernandes', 'joao.fernandes@senai.br');
+(6, 'Prof. João Victor Fernandes', 'joao.fernandes@senai.br'),
+(7, 'Aluno novo', 'aluno@novo.com');
 
 -- --------------------------------------------------------
 
@@ -131,6 +155,13 @@ CREATE TABLE `projetos` (
   `imagem` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--
+-- Extraindo dados da tabela `projetos`
+--
+
+INSERT INTO `projetos` (`id`, `titulo`, `resumo`, `id_orientador`, `id_area`, `status`, `data_cadastro`, `imagem`) VALUES
+(26, 'Teste de Projeto do vini', 'Teste de Projeto, talvez o site ja esteja pronto!!!!!1', 2, 5, 7, '2025-11-03 14:04:27', '6908b66b09976.png');
+
 -- --------------------------------------------------------
 
 --
@@ -141,6 +172,34 @@ CREATE TABLE `projetos_alunos` (
   `id_projeto` int(11) NOT NULL,
   `id_aluno` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Extraindo dados da tabela `projetos_alunos`
+--
+
+INSERT INTO `projetos_alunos` (`id_projeto`, `id_aluno`) VALUES
+(26, 17);
+
+-- --------------------------------------------------------
+
+--
+-- Estrutura da tabela `remember_tokens`
+--
+
+CREATE TABLE `remember_tokens` (
+  `id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `token` varchar(64) NOT NULL,
+  `expira_em` datetime NOT NULL,
+  `criado_em` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Extraindo dados da tabela `remember_tokens`
+--
+
+INSERT INTO `remember_tokens` (`id`, `usuario_id`, `token`, `expira_em`, `criado_em`) VALUES
+(3, 9, '59a96dd6f4dc5b1c1d4ea4b753ebe2e41670179bfecf9cbcd1f35eae19a9b469', '2025-12-03 13:56:04', '2025-11-03 13:56:04');
 
 -- --------------------------------------------------------
 
@@ -174,6 +233,7 @@ CREATE TABLE `usuarios` (
   `id` int(11) NOT NULL,
   `nome` varchar(200) NOT NULL,
   `email` varchar(150) NOT NULL,
+  `foto_perfil` varchar(255) DEFAULT NULL,
   `senha` varchar(255) NOT NULL,
   `tipo` varchar(20) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -182,9 +242,8 @@ CREATE TABLE `usuarios` (
 -- Extraindo dados da tabela `usuarios`
 --
 
-INSERT INTO `usuarios` (`id`, `nome`, `email`, `senha`, `tipo`) VALUES
-(1, 'Vinicius Bezerra', 'vini@email.com', '$2y$10$UTy0gR5hk8e4Aa.S6IYGve0NXWEvOrijQbbtqX0UyX4tSF9KFOiyq', 'aluno'),
-(2, 'Professor', 'professor@email.com', '$2y$10$Ikr0B8idls8cebc7J0peCuegLbMfowTfvXrO49yPZriPBFg510RiK', 'orientador');
+INSERT INTO `usuarios` (`id`, `nome`, `email`, `foto_perfil`, `senha`, `tipo`) VALUES
+(9, 'Vinicius Gabriel Bezerra', 'viniciusg21bezerra@gmail.com', 'perfil_9_1762178598.png', '$2y$10$X4w0p/MzQx7GYGZHDSs2Yuu53dQ5PLVrc9bAlF082S7vhCPGtXvbq', 'aluno');
 
 --
 -- Indexes for dumped tables
@@ -204,6 +263,13 @@ ALTER TABLE `alunos`
 ALTER TABLE `areas`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `nome` (`nome`);
+
+--
+-- Indexes for table `documentos`
+--
+ALTER TABLE `documentos`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `id_projeto` (`id_projeto`);
 
 --
 -- Indexes for table `imagens`
@@ -237,6 +303,15 @@ ALTER TABLE `projetos_alunos`
   ADD KEY `idx_projetos_alunos_aluno` (`id_aluno`);
 
 --
+-- Indexes for table `remember_tokens`
+--
+ALTER TABLE `remember_tokens`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `token` (`token`),
+  ADD KEY `usuario_id` (`usuario_id`),
+  ADD KEY `expira_em` (`expira_em`);
+
+--
 -- Indexes for table `status`
 --
 ALTER TABLE `status`
@@ -258,12 +333,17 @@ ALTER TABLE `usuarios`
 -- AUTO_INCREMENT for table `alunos`
 --
 ALTER TABLE `alunos`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 --
 -- AUTO_INCREMENT for table `areas`
 --
 ALTER TABLE `areas`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+--
+-- AUTO_INCREMENT for table `documentos`
+--
+ALTER TABLE `documentos`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 --
 -- AUTO_INCREMENT for table `imagens`
 --
@@ -273,12 +353,17 @@ ALTER TABLE `imagens`
 -- AUTO_INCREMENT for table `orientadores`
 --
 ALTER TABLE `orientadores`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 --
 -- AUTO_INCREMENT for table `projetos`
 --
 ALTER TABLE `projetos`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=27;
+--
+-- AUTO_INCREMENT for table `remember_tokens`
+--
+ALTER TABLE `remember_tokens`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 --
 -- AUTO_INCREMENT for table `status`
 --
@@ -288,10 +373,16 @@ ALTER TABLE `status`
 -- AUTO_INCREMENT for table `usuarios`
 --
 ALTER TABLE `usuarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 --
 -- Constraints for dumped tables
 --
+
+--
+-- Limitadores para a tabela `documentos`
+--
+ALTER TABLE `documentos`
+  ADD CONSTRAINT `documentos_ibfk_1` FOREIGN KEY (`id_projeto`) REFERENCES `projetos` (`id`) ON DELETE CASCADE;
 
 --
 -- Limitadores para a tabela `imagens`
@@ -313,6 +404,12 @@ ALTER TABLE `projetos`
 ALTER TABLE `projetos_alunos`
   ADD CONSTRAINT `projetos_alunos_ibfk_1` FOREIGN KEY (`id_projeto`) REFERENCES `projetos` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `projetos_alunos_ibfk_2` FOREIGN KEY (`id_aluno`) REFERENCES `alunos` (`id`) ON DELETE CASCADE;
+
+--
+-- Limitadores para a tabela `remember_tokens`
+--
+ALTER TABLE `remember_tokens`
+  ADD CONSTRAINT `remember_tokens_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
