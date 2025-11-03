@@ -259,8 +259,9 @@ $csrfToken = generateCSRFToken();
         <div class="container">
             <h2 class="section-title">Entre em Contato</h2>
             <div class="contato-content">
-                <p>Tem dúvidas ou sugestões? Entre em contato conosco!</p>
-                <a href="mailto:contato@gerenciamentodeartigos.com" class="btn-contato">Enviar E-mail</a>
+                <p>Tem dúvidas ou sugestões? Entre em contato comigo</p>
+                <a href="mailto:viniciusg21bezerra@gmail.com" class="btn-contato">Enviar E-mail</a>
+                <a href="https://api.whatsapp.com/send?phone=5547989132699" target="_blank" class="btn-contato">Enviar Mensagem</a>
             </div>
         </div>
     </section>
@@ -268,9 +269,9 @@ $csrfToken = generateCSRFToken();
     <!-- Footer -->
     <footer class="rodape">
         <div class="container">
-            <p>Desenvolvido com dedicação por estudantes do curso de Desenvolvimento de Sistemas.</p>
+            <p>Desenvolvido com dedicação por um estudante do curso de Desenvolvimento de Sistemas.</p>
             <p>Uma iniciativa voltada à inovação, aprendizado e gestão do conhecimento.</p>
-            <p class="copyright">&copy; 2025 Gerenciamento de Artigos. Todos os direitos reservados.</p>
+            <p class="copyright">&copy; 2025 Gerenciamento de Artigos. Todos os direitos reservados à Vinicius Gabriel Bezerra.</p>
         </div>
     </footer>
 </body>

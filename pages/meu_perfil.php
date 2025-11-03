@@ -220,6 +220,74 @@ $conexao->close();
         .btn-editar-perfil:hover {
             background-color: #f0f0f0;
         }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-conteudo {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .modal-header h2 {
+            margin: 0;
+        }
+        .fechar-modal {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #333;
+        }
+        .modal-corpo {
+            margin-bottom: 20px;
+        }
+        .aviso-exclusao {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .texto-modal {
+            margin-bottom: 10px;
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: space-between;
+        }
+        .btn-cancelar {
+            background-color: #d35400;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-confirmar-exclusao {
+            background-color: #e74c3c;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -254,6 +322,11 @@ $conexao->close();
                     <p><strong>Email:</strong> <?php echo htmlspecialchars($usuario_email); ?></p>
                     <p><strong>Tipo:</strong> <?php echo htmlspecialchars(ucfirst($tipo)); ?></p>
                     <a href="editar_perfil.php" class="btn-editar-perfil">Editar Perfil</a>
+                    <!-- Added logout and delete profile buttons -->
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
+                        <a href="../php/logout.php" class="btn-editar-perfil" style="background-color: #f39c12; flex: 1; text-align: center; color: white;">Encerrar Sessão</a>
+                        <button onclick="abrirModalExcluir()" class="btn-editar-perfil" style="background-color: #e74c3c; flex: 1; cursor: pointer; border: none; color: white;">Excluir Perfil</button>
+                    </div>
                 </div>
             </div>
 
@@ -270,7 +343,7 @@ $conexao->close();
                         <input type="text" 
                                name="busca" 
                                placeholder="Buscar por título ou resumo..." 
-                               value="<?php echo htmlspecialchars($filtro_busca); ?>"
+                               value="<?php echo htmlspecialchars($filtro_busca); ?> "
                                class="input-busca">
                     </div>
 
@@ -349,6 +422,47 @@ $conexao->close();
         </div>
     </main>
 
+    <!-- Added modal for profile deletion confirmation -->
+    <div id="modalExcluir" class="modal">
+        <div class="modal-conteudo">
+            <div class="modal-header">
+                <h2>Excluir Perfil</h2>
+                <button onclick="fecharModalExcluir()" class="fechar-modal">&times;</button>
+            </div>
+            <div class="modal-corpo">
+                <p class="aviso-exclusao">⚠️ Tem certeza que deseja excluir sua conta?</p>
+                <p class="texto-modal">Lamentamos que vá partir. Sua conta será permanentemente deletada e não será possível recuperar seus dados. Todos os seus projetos e informações serão removidos do sistema.</p>
+                <p class="texto-confirmacao">Esta ação é irreversível. Tem certeza?</p>
+            </div>
+            <div class="modal-footer">
+                <button onclick="fecharModalExcluir()" class="btn-cancelar">Cancelar</button>
+                <form action="../php/delete_profile.php" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(generateCSRFToken()); ?>">
+                    <button type="submit" class="btn-confirmar-exclusao" onclick="return confirm('Esta é sua última chance! Tem CERTEZA que deseja deletar sua conta permanentemente?')">Sim, Excluir Meu Perfil</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="../js/projeto.js"></script>
+    <script>
+        function abrirModalExcluir() {
+            document.getElementById('modalExcluir').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function fecharModalExcluir() {
+            document.getElementById('modalExcluir').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // Fechar modal ao clicar fora
+        window.onclick = function(event) {
+            var modal = document.getElementById('modalExcluir');
+            if (event.target == modal) {
+                fecharModalExcluir();
+            }
+        }
+    </script>
 </body>
 </html>

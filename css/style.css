@@ -181,12 +181,24 @@ main {
   animation: fadeInUp 0.5s ease-out backwards;
 }
 
-.projeto-card:nth-child(1) { animation-delay: 0.05s; }
-.projeto-card:nth-child(2) { animation-delay: 0.1s; }
-.projeto-card:nth-child(3) { animation-delay: 0.15s; }
-.projeto-card:nth-child(4) { animation-delay: 0.2s; }
-.projeto-card:nth-child(5) { animation-delay: 0.25s; }
-.projeto-card:nth-child(6) { animation-delay: 0.3s; }
+.projeto-card:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.projeto-card:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.projeto-card:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.projeto-card:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.projeto-card:nth-child(5) {
+  animation-delay: 0.25s;
+}
+.projeto-card:nth-child(6) {
+  animation-delay: 0.3s;
+}
 
 .projeto-card:hover {
   transform: translateY(-5px);
@@ -340,11 +352,21 @@ main {
   animation: fadeInUp 0.5s ease-out forwards;
 }
 
-.form-group:nth-child(1) { animation-delay: 0.1s; }
-.form-group:nth-child(2) { animation-delay: 0.15s; }
-.form-group:nth-child(3) { animation-delay: 0.2s; }
-.form-group:nth-child(4) { animation-delay: 0.25s; }
-.form-group:nth-child(5) { animation-delay: 0.3s; }
+.form-group:nth-child(1) {
+  animation-delay: 0.1s;
+}
+.form-group:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.form-group:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.form-group:nth-child(4) {
+  animation-delay: 0.25s;
+}
+.form-group:nth-child(5) {
+  animation-delay: 0.3s;
+}
 
 .form-group label {
   display: block;
@@ -458,4 +480,144 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* Added modal styles for profile deletion */
+.modal {
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.5);
+  animation: fadeInOverlay 0.3s ease;
+}
+
+@keyframes fadeInOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-conteudo {
+  background-color: white;
+  margin: 10% auto;
+  padding: 0;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: slideInModal 0.3s ease;
+}
+
+@keyframes slideInModal {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 22px;
+}
+
+.fechar-modal {
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: #7f8c8d;
+  transition: color 0.3s ease;
+}
+
+.fechar-modal:hover {
+  color: #e74c3c;
+}
+
+.modal-corpo {
+  padding: 30px;
+}
+
+.aviso-exclusao {
+  font-size: 18px;
+  color: #e74c3c;
+  font-weight: 600;
+  margin-bottom: 15px;
+}
+
+.texto-modal {
+  color: #555;
+  line-height: 1.6;
+  margin-bottom: 15px;
+}
+
+.texto-confirmacao {
+  color: #e74c3c;
+  font-weight: 500;
+  margin-bottom: 0;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 20px;
+  border-top: 2px solid #f0f0f0;
+  justify-content: flex-end;
+}
+
+.btn-cancelar {
+  padding: 10px 20px;
+  background-color: #95a5a6;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-cancelar:hover {
+  background-color: #7f8c8d;
+  transform: translateY(-2px);
+}
+
+.btn-confirmar-exclusao {
+  padding: 10px 20px;
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-confirmar-exclusao:hover {
+  background-color: #c0392b;
+  transform: translateY(-2px);
+}
+
+.btn-confirmar-exclusao:active {
+  transform: translateY(0);
 }

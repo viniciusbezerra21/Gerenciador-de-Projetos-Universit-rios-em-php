@@ -18,7 +18,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nome = sanitizeInput($_POST['nome'] ?? '');
         $email = sanitizeInput($_POST['email'] ?? '');
         $senha = $_POST['senha'] ?? '';
-        $tipo = 'aluno';
+        $tipo = sanitizeInput($_POST['tipo'] ?? 'aluno');
+        
+        // Validate tipo is either 'aluno' or 'orientador'
+        if (!in_array($tipo, ['aluno', 'orientador'])) {
+            $tipo = 'aluno';
+        }
 
         if (empty($nome) || empty($email) || empty($senha)) {
             $mensagem = 'Por favor, preencha todos os campos.';
@@ -139,6 +144,41 @@ $csrf_token = generateCSRFToken();
             stroke-linecap: round;
             stroke-linejoin: round;
         }
+
+        /* add styles for user type selection */
+        .form-group.user-type-group {
+            margin-bottom: 24px;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 20px;
+            margin-top: 12px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .radio-option input[type="radio"] {
+            cursor: pointer;
+            accent-color: #059669;
+        }
+
+        .radio-option label {
+            cursor: pointer;
+            margin: 0;
+            font-weight: 500;
+            flex: 1;
+        }
+
+        .radio-option input[type="radio"]:checked + label {
+            color: #059669;
+        }
     </style>
 </head>
 <body>
@@ -166,6 +206,21 @@ $csrf_token = generateCSRFToken();
                 <div class="form-group">
                     <label for="email">Email</label>
                     <input type="email" id="email" name="email" required placeholder="seu@email.com" autocomplete="email">
+                </div>
+
+                <!-- add user type selection -->
+                <div class="form-group user-type-group">
+                    <label>Tipo de Cadastro</label>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" id="tipo-aluno" name="tipo" value="aluno" checked required>
+                            <label for="tipo-aluno">Aluno</label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" id="tipo-orientador" name="tipo" value="orientador" required>
+                            <label for="tipo-orientador">Orientador</label>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">

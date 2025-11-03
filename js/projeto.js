@@ -78,28 +78,4 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       })
     })
-  
-    const links = document.querySelectorAll("a[href$='.php']")
-    links.forEach((link) => {
-      link.addEventListener("click", function (e) {
-        const href = this.href
-        if (!href.includes("#")) {
-          e.preventDefault()
-          document.body.style.opacity = "1"
-          document.body.style.transition = "opacity 0.3s ease-out"
-          document.body.style.opacity = "0"
-          setTimeout(() => {
-            window.location.href = href
-          }, 300)
-        }
-      })
-    })
-  
-    // Fade in ao entrar na página
-    window.addEventListener("pageshow", () => {
-      document.body.style.opacity = "0"
-      document.body.style.transition = "opacity 0.3s ease-in"
-      document.body.style.opacity = "1"
-    })
   })
-  
