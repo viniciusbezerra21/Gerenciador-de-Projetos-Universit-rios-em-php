@@ -1,12 +1,16 @@
 <?php
-require_once '../config/security.php';
+session_start();
 require_once '../config/database.php';
 
-requireLogin();
+if (!isset($_SESSION['usuario_id'])) {
+    header('Location: login.php');
+    exit;
+}
 
-$nome = sanitizeInput($_SESSION['usuario_nome']);
-$tipo = $_SESSION['usuario_tipo'];
+$nome = $_SESSION['usuario_nome'] ?? 'Usuário';
+$tipo = $_SESSION['usuario_tipo'] ?? 'aluno';
 $usuario_id = $_SESSION['usuario_id'];
+$usuario_email = $_SESSION['usuario_email'] ?? '';
 
 $conexao = getConnection();
 
@@ -15,51 +19,59 @@ if (!$conexao) {
 }
 
 // Filtros
-$filtro_area = isset($_GET['area']) ? intval($_GET['area']) : 0;
-$filtro_status = isset($_GET['status']) ? intval($_GET['status']) : 0;
-$filtro_busca = sanitizeInput($_GET['busca'] ?? '');
+$filtro_area = isset($_GET['area']) ? $_GET['area'] : '';
+$filtro_status = isset($_GET['status']) ? $_GET['status'] : '';
+$filtro_busca = isset($_GET['busca']) ? $_GET['busca'] : '';
 
 $query = "SELECT p.*, o.nome as orientador_nome, a.nome as area_nome, s.descricao as status_descricao 
           FROM projetos p 
           LEFT JOIN orientadores o ON p.id_orientador = o.id 
           LEFT JOIN areas a ON p.id_area = a.id 
-          LEFT JOIN status s ON p.status = s.id 
-          WHERE 1=1";
+          LEFT JOIN status s ON p.status = s.id ";
 
-$params = [];
-$types = '';
+$where_conditions = [];
 
-if ($filtro_area > 0) {
-    $query .= " AND p.id_area = ?";
-    $params[] = $filtro_area;
-    $types .= 'i';
+// Determinar filtro por tipo de usuário
+if ($tipo === 'orientador' && !empty($usuario_email)) {
+    $query_orientador = "SELECT id FROM orientadores WHERE email = '" . $conexao->real_escape_string($usuario_email) . "' LIMIT 1";
+    $result_orientador = $conexao->query($query_orientador);
+    
+    if ($result_orientador && $result_orientador->num_rows > 0) {
+        $orientador = $result_orientador->fetch_assoc();
+        $where_conditions[] = "p.id_orientador = " . intval($orientador['id']);
+    } else {
+        $where_conditions[] = "1=0";
+    }
+} else if (!empty($usuario_email)) {
+    $query_aluno = "SELECT id FROM alunos WHERE email = '" . $conexao->real_escape_string($usuario_email) . "' LIMIT 1";
+    $result_aluno = $conexao->query($query_aluno);
+    
+    if ($result_aluno && $result_aluno->num_rows > 0) {
+        $aluno = $result_aluno->fetch_assoc();
+        $query .= "INNER JOIN projetos_alunos pa ON p.id = pa.id_projeto ";
+        $where_conditions[] = "pa.id_aluno = " . intval($aluno['id']);
+    } else {
+        $where_conditions[] = "1=0";
+    }
 }
-if ($filtro_status > 0) {
-    $query .= " AND p.status = ?";
-    $params[] = $filtro_status;
-    $types .= 'i';
+
+$query .= "WHERE " . (count($where_conditions) > 0 ? implode(" AND ", $where_conditions) : "1=1");
+
+// Aplicar filtros
+if (!empty($filtro_area)) {
+    $query .= " AND p.id_area = " . intval($filtro_area);
+}
+if (!empty($filtro_status)) {
+    $query .= " AND p.status = " . intval($filtro_status);
 }
 if (!empty($filtro_busca)) {
-    $query .= " AND (p.titulo LIKE ? OR p.resumo LIKE ?)";
-    $search_term = "%$filtro_busca%";
-    $params[] = $search_term;
-    $params[] = $search_term;
-    $types .= 'ss';
+    $filtro_busca_safe = $conexao->real_escape_string($filtro_busca);
+    $query .= " AND (p.titulo LIKE '%$filtro_busca_safe%' OR p.resumo LIKE '%$filtro_busca_safe%')";
 }
 
 $query .= " ORDER BY p.data_cadastro DESC";
-$stmt = $conexao->prepare($query);
 
-if ($stmt && !empty($params)) {
-    $stmt->bind_param($types, ...$params);
-}
-
-if ($stmt) {
-    $stmt->execute();
-    $result = $stmt->get_result();
-} else {
-    $result = $conexao->query($query);
-}
+$result = $conexao->query($query);
 
 if (!$result) {
     die("Erro na consulta: " . $conexao->error);
@@ -89,9 +101,6 @@ if ($result_status) {
     }
 }
 
-if (isset($stmt)) {
-    $stmt->close();
-}
 $conexao->close();
 ?>
 <!DOCTYPE html>
@@ -99,7 +108,7 @@ $conexao->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Listar Projetos</title>
+    <title>Meu Perfil - Meus Projetos</title>
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
@@ -119,10 +128,10 @@ $conexao->close();
 
     <main>
         <div class="container">
-            <h1 class="titulo">Veja seus Projetos</h1>
+            <h1 class="titulo">Meu Perfil - Meus Projetos</h1>
 
             <div class="apresentacao">
-                <p>Seus projetos cadastrados</p>
+                <p>Aqui estão todos os seus projetos cadastrados (Tipo de usuário: <?php echo htmlspecialchars($tipo); ?>)</p>
             </div>
 
             <!-- Filtros -->
@@ -161,7 +170,7 @@ $conexao->close();
                     </div>
 
                     <button type="submit" class="btn-filtrar">Filtrar</button>
-                    <a href="projetos.php" class="btn-limpar">Limpar</a>
+                    <a href="meu_perfil.php" class="btn-limpar">Limpar</a>
                 </form>
             </div>
 
@@ -193,7 +202,7 @@ $conexao->close();
                                             <strong>Status:</strong> <?php echo htmlspecialchars($projeto['status_descricao']); ?>
                                         </span>
                                         <span class="meta-item">
-                                            <strong>Orientador:</strong> <?php echo htmlspecialchars($projeto['orientador_nome']); ?>
+                                            <strong>Orientador:</strong> <?php echo htmlspecialchars($projeto['orientador_nome'] ?? 'N/A'); ?>
                                         </span>
                                     </div>
                                     
@@ -203,7 +212,7 @@ $conexao->close();
                         <?php endforeach; ?>
                     <?php else: ?>
                         <li class="sem-projetos-container">
-                            <p class="sem-projetos">Nenhum projeto encontrado.</p>
+                            <p class="sem-projetos">Você ainda não cadastrou nenhum projeto. <a href="cadastrar_projeto.php">Cadastre seu primeiro projeto!</a></p>
                         </li>
                     <?php endif; ?>
                 </ul>

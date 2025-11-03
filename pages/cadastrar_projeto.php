@@ -90,7 +90,9 @@ $conexao->close();
         <h2 class="titulo-sidebar">Bem-vindo(a), <?php echo htmlspecialchars($nome); ?>!</h2>
         <div class="funcoes-sidebar">
             <ul>
-                <li><a href="projetos.php">Seus Projetos</a></li>
+                <!-- Adicionado links para Meu Perfil e Artigos Públicos -->
+                <li><a href="meu_perfil.php">Meu Perfil</a></li>
+                <li><a href="projetos.php">Todos os Projetos</a></li>
                 <li><a href="cadastrar_projeto.php">Cadastrar Projeto</a></li>
                 <li><a href="relatorios.php">Gerar Relatórios</a></li>
                 <li><a href="../php/logout.php">Sair</a></li>
