@@ -17,6 +17,25 @@ error_log("=== CADASTRO DE PROJETO ===");
 error_log("Email do usuário: " . $usuario_email);
 error_log("Tipo de usuário: " . $tipo);
 
+$id_orientador_usuario = null;
+$orientador_nome_usuario = null;
+
+if ($tipo === 'orientador') {
+    $stmt_orientador_id = $conexao->prepare("SELECT id, nome FROM orientadores WHERE email = ? LIMIT 1");
+    if ($stmt_orientador_id) {
+        $stmt_orientador_id->bind_param("s", $usuario_email);
+        $stmt_orientador_id->execute();
+        $result = $stmt_orientador_id->get_result();
+        if ($result && $result->num_rows > 0) {
+            $orientador_data = $result->fetch_assoc();
+            $id_orientador_usuario = $orientador_data['id'];
+            $orientador_nome_usuario = $orientador_data['nome'];
+            error_log("Orientador encontrado: ID=" . $id_orientador_usuario . ", Nome=" . $orientador_nome_usuario);
+        }
+        $stmt_orientador_id->close();
+    }
+}
+
 $query_orientadores = "SELECT id, nome FROM orientadores ORDER BY nome";
 $result_orientadores = $conexao->query($query_orientadores);
 
@@ -35,7 +54,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $titulo = sanitizeInput(trim($_POST['titulo']));
         $resumo = sanitizeInput(trim($_POST['resumo']));
-        $id_orientador = intval($_POST['id_orientador']);
+        
+        if ($tipo === 'orientador') {
+            $id_orientador = $id_orientador_usuario;
+        } else {
+            $id_orientador = intval($_POST['id_orientador']);
+        }
+        
         $id_area = intval($_POST['id_area']);
         $status = intval($_POST['id_status']);
         $imagem_nome = null;
@@ -105,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $stmt_aluno->close();
                 } else if ($tipo === 'orientador') {
-                    error_log("Tipo de usuário é ORIENTADOR - não vincula em projetos_alunos");
+                    error_log("Tipo de usuário é ORIENTADOR - projeto automaticamente vinculado via id_orientador");
                 } else {
                     error_log("Tipo de usuário desconhecido: " . $tipo);
                 }
@@ -158,7 +183,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $conexao->close();
 ?>
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -220,7 +244,15 @@ $conexao->close();
 
      <main class="main-content">
         <div class="content-card">
-            <h2>Cadastrar Novo Projeto</h2>
+            <!-- Adicionar mensagem específica para orientadores -->
+            <?php if ($tipo === 'orientador'): ?>
+                <h2>Cadastrar Novo Projeto como Orientador</h2>
+                <p style="color: #3d7bb8; font-weight: 500; margin-bottom: 20px;">
+                    Os projetos que você cadastrar serão automaticamente vinculados a você como orientador responsável.
+                </p>
+            <?php else: ?>
+                <h2>Cadastrar Novo Projeto</h2>
+            <?php endif; ?>
             
             <?php if ($mensagem): ?>
                 <div class="mensagem <?php echo $tipo_mensagem; ?>">
@@ -247,17 +279,27 @@ $conexao->close();
                     <small>Formatos aceitos: JPG, JPEG, PNG, GIF</small>
                 </div>
 
-                <div class="form-group">
-                    <label for="id_orientador">Orientador</label>
-                    <select id="id_orientador" name="id_orientador" required>
-                        <option value="">Selecione um orientador</option>
-                        <?php while ($orientador = $result_orientadores->fetch_assoc()): ?>
-                            <option value="<?php echo $orientador['id']; ?>">
-                                <?php echo htmlspecialchars($orientador['nome']); ?>
-                            </option>
-                        <?php endwhile; ?>
-                    </select>
-                </div>
+                <!-- Mostrar seleção de orientador apenas para alunos -->
+                <?php if ($tipo === 'aluno'): ?>
+                    <div class="form-group">
+                        <label for="id_orientador">Orientador</label>
+                        <select id="id_orientador" name="id_orientador" required>
+                            <option value="">Selecione um orientador</option>
+                            <?php while ($orientador = $result_orientadores->fetch_assoc()): ?>
+                                <option value="<?php echo $orientador['id']; ?>">
+                                    <?php echo htmlspecialchars($orientador['nome']); ?>
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+                <?php else: ?>
+                    <!-- Para orientadores, mostrar informação de quem está orientando -->
+                    <div class="form-group">
+                        <label>Orientador Responsável</label>
+                        <input type="text" value="<?php echo htmlspecialchars($orientador_nome_usuario); ?>" readonly style="background-color: #f5f5f5;">
+                        <small>Seus projetos serão automaticamente associados a você como orientador responsável.</small>
+                    </div>
+                <?php endif; ?>
 
                 <div class="form-group">
                     <label for="id_area">Área</label>
