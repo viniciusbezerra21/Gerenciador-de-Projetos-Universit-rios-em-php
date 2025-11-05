@@ -31,12 +31,105 @@ if (!$stmt_user) {
     $stmt_user->close();
 }
 
+// Configuração de paginação
+$itens_por_pagina = 9; // Número de projetos por página
+$pagina_atual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
+$offset = ($pagina_atual - 1) * $itens_por_pagina;
+
 // Filtros
 $filtro_area = isset($_GET['area']) ? intval($_GET['area']) : 0;
 $filtro_status = isset($_GET['status']) ? intval($_GET['status']) : 0;
 $filtro_busca = sanitizeInput($_GET['busca'] ?? '');
 
-// Base da query
+$query_count = "SELECT COUNT(*) as total 
+                FROM projetos p ";
+
+$where_conditions_count = [];
+$params_count = [];
+$types_count = '';
+
+// Filtrar por tipo de usuário
+if ($tipo === 'orientador') {
+    $stmt = $conexao->prepare("SELECT id FROM orientadores WHERE email = ? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param("s", $usuario_email);
+        $stmt->execute();
+        $result_orientador = $stmt->get_result();
+        
+        if ($result_orientador && $result_orientador->num_rows > 0) {
+            $orientador = $result_orientador->fetch_assoc();
+            $where_conditions_count[] = "p.id_orientador = ?";
+            $params_count[] = $orientador['id'];
+            $types_count .= 'i';
+        } else {
+            $where_conditions_count[] = "1=0";
+        }
+        $stmt->close();
+    }
+} else if ($tipo === 'aluno') {
+    $stmt = $conexao->prepare("SELECT id FROM alunos WHERE email = ? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param("s", $usuario_email);
+        $stmt->execute();
+        $result_aluno = $stmt->get_result();
+        
+        if ($result_aluno && $result_aluno->num_rows > 0) {
+            $aluno = $result_aluno->fetch_assoc();
+            $aluno_id = $aluno['id'];
+            
+            $query_count .= "INNER JOIN projetos_alunos pa ON p.id = pa.id_projeto ";
+            $where_conditions_count[] = "pa.id_aluno = ?";
+            $params_count[] = $aluno_id;
+            $types_count .= 'i';
+        } else {
+            $where_conditions_count[] = "1=0";
+        }
+        $stmt->close();
+    }
+}
+
+if (count($where_conditions_count) > 0) {
+    $query_count .= "WHERE " . implode(" AND ", $where_conditions_count);
+} else {
+    $query_count .= "WHERE 1=1";
+}
+
+// Aplicar filtros adicionais na contagem
+if ($filtro_area > 0) {
+    $query_count .= " AND p.id_area = ?";
+    $params_count[] = $filtro_area;
+    $types_count .= 'i';
+}
+if ($filtro_status > 0) {
+    $query_count .= " AND p.status = ?";
+    $params_count[] = $filtro_status;
+    $types_count .= 'i';
+}
+if (!empty($filtro_busca)) {
+    $query_count .= " AND (p.titulo LIKE ? OR p.resumo LIKE ?)";
+    $search_term = "%$filtro_busca%";
+    $params_count[] = $search_term;
+    $params_count[] = $search_term;
+    $types_count .= 'ss';
+}
+
+$stmt_count = $conexao->prepare($query_count);
+if ($stmt_count && !empty($params_count)) {
+    $stmt_count->bind_param($types_count, ...$params_count);
+}
+if ($stmt_count) {
+    $stmt_count->execute();
+    $result_count = $stmt_count->get_result();
+    $total_projetos = $result_count->fetch_assoc()['total'];
+    $stmt_count->close();
+} else {
+    $total_projetos = 0;
+}
+
+// Calcular total de páginas
+$total_paginas = ceil($total_projetos / $itens_por_pagina);
+
+// Base da query principal
 $query = "SELECT p.*, o.nome as orientador_nome, a.nome as area_nome, s.descricao as status_descricao 
           FROM projetos p 
           LEFT JOIN orientadores o ON p.id_orientador = o.id 
@@ -118,7 +211,10 @@ if (!empty($filtro_busca)) {
     $types .= 'ss';
 }
 
-$query .= " ORDER BY p.data_cadastro DESC";
+$query .= " ORDER BY p.data_cadastro DESC LIMIT ? OFFSET ?";
+$params[] = $itens_por_pagina;
+$params[] = $offset;
+$types .= 'ii';
 
 // Executar query
 $stmt = $conexao->prepare($query);
@@ -159,6 +255,12 @@ if ($result_status) {
 }
 
 $conexao->close();
+
+function construirUrlPaginacao($pagina) {
+    $params = $_GET;
+    $params['pagina'] = $pagina;
+    return '?' . http_build_query($params);
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -341,6 +443,8 @@ $conexao->close();
 
             <div class="apresentacao">
                 <p>Aqui estão todos os seus projetos cadastrados (Tipo de usuário: <?php echo htmlspecialchars($tipo); ?>)</p>
+                <!-- Adicionando informação sobre total de resultados -->
+                <p><strong>Total de projetos: <?php echo $total_projetos; ?></strong></p>
             </div>
 
             <div class="filtros-container">
@@ -424,6 +528,42 @@ $conexao->close();
                     <?php endif; ?>
                 </ul>
             </div>
+
+            <!-- Adicionando controles de paginação -->
+            <?php if ($total_paginas > 1): ?>
+                <div class="paginacao">
+                    <div class="paginacao-info">
+                        Mostrando <?php echo min($offset + 1, $total_projetos); ?> 
+                        a <?php echo min($offset + $itens_por_pagina, $total_projetos); ?> 
+                        de <?php echo $total_projetos; ?> projetos
+                    </div>
+                    
+                    <div class="paginacao-controles">
+                        <?php if ($pagina_atual > 1): ?>
+                            <a href="<?php echo construirUrlPaginacao(1); ?>" class="btn-paginacao">« Primeira</a>
+                            <a href="<?php echo construirUrlPaginacao($pagina_atual - 1); ?>" class="btn-paginacao">‹ Anterior</a>
+                        <?php endif; ?>
+
+                        <?php
+                        // Mostrar páginas ao redor da página atual
+                        $inicio = max(1, $pagina_atual - 2);
+                        $fim = min($total_paginas, $pagina_atual + 2);
+                        
+                        for ($i = $inicio; $i <= $fim; $i++):
+                        ?>
+                            <a href="<?php echo construirUrlPaginacao($i); ?>" 
+                               class="btn-paginacao <?php echo ($i == $pagina_atual) ? 'ativo' : ''; ?>">
+                                <?php echo $i; ?>
+                            </a>
+                        <?php endfor; ?>
+
+                        <?php if ($pagina_atual < $total_paginas): ?>
+                            <a href="<?php echo construirUrlPaginacao($pagina_atual + 1); ?>" class="btn-paginacao">Próxima ›</a>
+                            <a href="<?php echo construirUrlPaginacao($total_paginas); ?>" class="btn-paginacao">Última »</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
     </main>
 

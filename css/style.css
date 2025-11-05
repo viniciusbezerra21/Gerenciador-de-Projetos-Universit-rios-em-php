@@ -294,6 +294,65 @@ main {
   color: #95a5a6;
 }
 
+/* Estilos de Paginação */
+.paginacao {
+  margin-top: 40px;
+  padding: 30px 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.paginacao-info {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #7f8c8d;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.paginacao-controles {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-paginacao {
+  padding: 10px 16px;
+  background-color: #3498db;
+  color: white;
+  text-decoration: none;
+  border-radius: 5px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+  min-width: 45px;
+  text-align: center;
+}
+
+.btn-paginacao:hover {
+  background-color: #2980b9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+.btn-paginacao.ativo {
+  background-color: #2c3e50;
+  font-weight: bold;
+  border-color: #3498db;
+  cursor: default;
+  transform: none;
+}
+
+.btn-paginacao.ativo:hover {
+  background-color: #2c3e50;
+  transform: none;
+  box-shadow: none;
+}
+
 /* Formulário de Cadastro */
 .main-content {
   width: 100%;
@@ -456,6 +515,17 @@ main {
 
   .filtro-group {
     width: 100%;
+  }
+
+  /* Responsividade da paginação */
+  .paginacao-controles {
+    gap: 5px;
+  }
+
+  .btn-paginacao {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    min-width: 40px;
   }
 }
 

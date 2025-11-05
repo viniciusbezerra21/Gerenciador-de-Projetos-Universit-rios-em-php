@@ -11,10 +11,35 @@ if (!$conexao) {
     die("Erro na conexão com o banco de dados");
 }
 
+// Configuração de paginação
+$itens_por_pagina = 9; // Número de projetos por página
+$pagina_atual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
+$offset = ($pagina_atual - 1) * $itens_por_pagina;
+
 // Filtros
 $filtro_area = isset($_GET['area']) ? $_GET['area'] : '';
 $filtro_busca = isset($_GET['busca']) ? $_GET['busca'] : '';
 
+$query_count = "SELECT COUNT(*) as total 
+                FROM projetos p 
+                WHERE 1=1";
+
+// Aplicar filtros na contagem
+if (!empty($filtro_area)) {
+    $query_count .= " AND p.id_area = " . intval($filtro_area);
+}
+if (!empty($filtro_busca)) {
+    $filtro_busca_safe = $conexao->real_escape_string($filtro_busca);
+    $query_count .= " AND (p.titulo LIKE '%$filtro_busca_safe%' OR p.resumo LIKE '%$filtro_busca_safe%')";
+}
+
+$result_count = $conexao->query($query_count);
+$total_projetos = $result_count ? $result_count->fetch_assoc()['total'] : 0;
+
+// Calcular total de páginas
+$total_paginas = ceil($total_projetos / $itens_por_pagina);
+
+// Query principal
 $query = "SELECT p.*, o.nome as orientador_nome, a.nome as area_nome, s.descricao as status_descricao 
           FROM projetos p 
           LEFT JOIN orientadores o ON p.id_orientador = o.id 
@@ -31,7 +56,7 @@ if (!empty($filtro_busca)) {
     $query .= " AND (p.titulo LIKE '%$filtro_busca_safe%' OR p.resumo LIKE '%$filtro_busca_safe%')";
 }
 
-$query .= " ORDER BY p.data_cadastro DESC";
+$query .= " ORDER BY p.data_cadastro DESC LIMIT $itens_por_pagina OFFSET $offset";
 
 $result = $conexao->query($query);
 
@@ -55,6 +80,12 @@ if ($result_areas) {
 }
 
 $conexao->close();
+
+function construirUrlPaginacao($pagina) {
+    $params = $_GET;
+    $params['pagina'] = $pagina;
+    return '?' . http_build_query($params);
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -360,6 +391,8 @@ $conexao->close();
         <div class="page-intro">
             <h2>Explore os Projetos da Nossa Comunidade</h2>
             <p>Conheça os projetos de pesquisa cadastrados por estudantes e orientadores</p>
+            <!-- Adicionando informação sobre total de resultados -->
+            <p><strong>Total de projetos: <?php echo $total_projetos; ?></strong></p>
         </div>
 
         <!-- Filtros -->
@@ -434,6 +467,43 @@ $conexao->close();
                     </div>
                 <?php endforeach; ?>
             </div>
+
+            <!-- Adicionando controles de paginação -->
+            <?php if ($total_paginas > 1): ?>
+                <div class="paginacao" style="margin-top: 40px;">
+                    <div class="paginacao-info" style="text-align: center; margin-bottom: 20px; color: #7f8c8d;">
+                        Mostrando <?php echo min($offset + 1, $total_projetos); ?> 
+                        a <?php echo min($offset + $itens_por_pagina, $total_projetos); ?> 
+                        de <?php echo $total_projetos; ?> projetos
+                    </div>
+                    
+                    <div class="paginacao-controles" style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                        <?php if ($pagina_atual > 1): ?>
+                            <a href="<?php echo construirUrlPaginacao(1); ?>" class="btn-paginacao" style="padding: 10px 15px; background-color: #59a4eb; color: white; text-decoration: none; border-radius: 5px; transition: all 0.3s ease;">« Primeira</a>
+                            <a href="<?php echo construirUrlPaginacao($pagina_atual - 1); ?>" class="btn-paginacao" style="padding: 10px 15px; background-color: #59a4eb; color: white; text-decoration: none; border-radius: 5px; transition: all 0.3s ease;">‹ Anterior</a>
+                        <?php endif; ?>
+
+                        <?php
+                        // Mostrar páginas ao redor da página atual
+                        $inicio = max(1, $pagina_atual - 2);
+                        $fim = min($total_paginas, $pagina_atual + 2);
+                        
+                        for ($i = $inicio; $i <= $fim; $i++):
+                        ?>
+                            <a href="<?php echo construirUrlPaginacao($i); ?>" 
+                               class="btn-paginacao" 
+                               style="padding: 10px 15px; background-color: <?php echo ($i == $pagina_atual) ? '#3d5a80' : '#59a4eb'; ?>; color: white; text-decoration: none; border-radius: 5px; transition: all 0.3s ease; font-weight: <?php echo ($i == $pagina_atual) ? 'bold' : 'normal'; ?>;">
+                                <?php echo $i; ?>
+                            </a>
+                        <?php endfor; ?>
+
+                        <?php if ($pagina_atual < $total_paginas): ?>
+                            <a href="<?php echo construirUrlPaginacao($pagina_atual + 1); ?>" class="btn-paginacao" style="padding: 10px 15px; background-color: #59a4eb; color: white; text-decoration: none; border-radius: 5px; transition: all 0.3s ease;">Próxima ›</a>
+                            <a href="<?php echo construirUrlPaginacao($total_paginas); ?>" class="btn-paginacao" style="padding: 10px 15px; background-color: #59a4eb; color: white; text-decoration: none; border-radius: 5px; transition: all 0.3s ease;">Última »</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
         <?php else: ?>
             <div class="sem-artigos">
                 <p>Nenhum projeto encontrado no momento.</p>
